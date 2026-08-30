@@ -71,6 +71,12 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle: () => void 
         description: "Stay top-of-mind and never let an outreach conversation go cold",
       };
     }
+    if (pathname.startsWith("/notes")) {
+      return {
+        title: "Personal Notes",
+        description: "Your persistent scratchpad, outreach strategies, and client hunting logs",
+      };
+    }
     if (pathname.startsWith("/settings")) {
       return {
         title: "Settings & SMTP",

@@ -4,3 +4,4 @@ export * from "./OutreachActivity";
 export * from "./FollowUp";
 export * from "./MessageTemplate";
 export * from "./UserSettings";
+export * from "./Note";

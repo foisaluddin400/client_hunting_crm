@@ -9,6 +9,7 @@ import {
   Compass,
   Users,
   CalendarClock,
+  StickyNote,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,12 @@ export function Sidebar({
         pendingFollowUps > 0
           ? "bg-rose-100 text-rose-700 font-bold animate-pulse"
           : "bg-slate-100 text-slate-700",
+    },
+    {
+      name: "Notes",
+      href: "/notes",
+      icon: StickyNote,
+      badge: undefined,
     },
     {
       name: "Settings",
