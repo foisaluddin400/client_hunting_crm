@@ -85,14 +85,17 @@ export default function NotesPage() {
         body: JSON.stringify({ content }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to update notes.");
+        throw new Error(
+          data?.error || data?.details || `Failed to update notes (Status: ${res.status}).`
+        );
       }
 
+      const savedTime = data?.updatedAt ? new Date(data.updatedAt) : new Date();
       setLastSavedTime(
-        new Date().toLocaleTimeString([], {
+        savedTime.toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
           month: "short",
@@ -103,7 +106,7 @@ export default function NotesPage() {
       showToast({
         type: "success",
         title: "Notes Updated 📝",
-        message: "Your notes have been saved successfully to the database.",
+        message: data?.message || "Your notes have been saved successfully to the database.",
       });
     } catch (err: any) {
       console.error("Save notes error:", err);
