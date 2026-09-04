@@ -10,6 +10,7 @@ export type DbLeadStatus =
   | "NEW"
   | "QUALIFIED"
   | "CONTACTED"
+  | "CONNECTED"
   | "REPLIED"
   | "INTERESTED"
   | "FOLLOW_UP"
@@ -38,6 +39,8 @@ export interface ILead extends Document {
   notes?: string;
   avatarColor?: string;
   lastContactAt?: Date;
+  finderBusinessId?: Types.ObjectId;
+  foundAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -118,6 +121,7 @@ const LeadSchema = new Schema<ILead>(
         "NEW",
         "QUALIFIED",
         "CONTACTED",
+        "CONNECTED",
         "REPLIED",
         "INTERESTED",
         "FOLLOW_UP",
@@ -145,6 +149,16 @@ const LeadSchema = new Schema<ILead>(
     },
     lastContactAt: {
       type: Date,
+    },
+    finderBusinessId: {
+      type: Schema.Types.ObjectId,
+      ref: "LeadFinderBusiness",
+      index: true,
+    },
+    foundAt: {
+      type: Date,
+      default: Date.now,
+      index: true,
     },
   },
   {

@@ -1,17 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/lib/context/toast-context";
 import { useCRM } from "@/lib/context/crm-context";
 import { SearchableSelect } from "@/components/lead-finder/SearchableSelect";
-import {
-  ManageOptionsModal,
-} from "@/components/lead-finder/ManageOptionsModal";
-import {
-  RecentSearches,
-  RecentSearchItem,
-  RECENT_SEARCHES_KEY,
-} from "@/components/lead-finder/RecentSearches";
+import { ManageOptionsModal } from "@/components/lead-finder/ManageOptionsModal";
+import { RecentSearches, RecentSearchItem } from "@/components/lead-finder/RecentSearches";
+import { LeadFinderTable } from "@/components/lead-finder/LeadFinderTable";
+import { EditFinderBusinessModal } from "@/components/lead-finder/EditFinderBusinessModal";
+import { LeadFinderBusinessItem } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import {
   MapPin,
@@ -26,38 +23,69 @@ import {
 
 export default function LeadFinderPage() {
   const { showToast } = useToast();
-  const { categories, countries, updateCategories, updateCountries } = useCRM();
+  const { categories, countries, updateCategories, updateCountries, refreshData, refreshStats } =
+    useCRM();
 
   // Search Fields
   const [selectedCategory, setSelectedCategory] = useState<string>("Cleaning Services");
   const [selectedCountry, setSelectedCountry] = useState<string>("United States");
   const [cityLocation, setCityLocation] = useState<string>("Wichita");
 
-  // Recent Searches State with lazy initializer
-  const [recentSearches, setRecentSearches] = useState<RecentSearchItem[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const savedSearches = localStorage.getItem(RECENT_SEARCHES_KEY);
-        if (savedSearches) {
-          const parsed = JSON.parse(savedSearches);
-          if (Array.isArray(parsed)) {
-            return parsed;
-          }
-        }
-      } catch (err) {
-        console.error("Failed to parse saved searches:", err);
-      }
-    }
-    return [];
-  });
+  // Database-backed Recent Searches State
+  const [recentSearches, setRecentSearches] = useState<RecentSearchItem[]>([]);
+
+  // Lead Finder Businesses State
+  const [finderBusinesses, setFinderBusinesses] = useState<LeadFinderBusinessItem[]>([]);
+  const [isLoadingBusinesses, setIsLoadingBusinesses] = useState<boolean>(true);
+
+  // Edit Modal State
+  const [editingBusiness, setEditingBusiness] = useState<LeadFinderBusinessItem | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Management Modal State
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
 
-  // Update Categories & Persist (Unified Single Source of Truth)
+  // 1. Fetch Recent Searches from MongoDB
+  const fetchRecentSearches = useCallback(async () => {
+    try {
+      const res = await fetch("/api/google-maps-searches");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.searches)) {
+          setRecentSearches(data.searches);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch Google Maps searches:", err);
+    }
+  }, []);
+
+  // 2. Fetch Lead Finder Businesses from MongoDB
+  const fetchFinderBusinesses = useCallback(async () => {
+    setIsLoadingBusinesses(true);
+    try {
+      const res = await fetch("/api/lead-finder");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.businesses)) {
+          setFinderBusinesses(data.businesses);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch Lead Finder businesses:", err);
+    } finally {
+      setIsLoadingBusinesses(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRecentSearches();
+    fetchFinderBusinesses();
+  }, [fetchRecentSearches, fetchFinderBusinesses]);
+
+  // Update Categories & Persist
   const handleCategoriesChange = (newCategories: string[]) => {
     updateCategories(newCategories);
-    // If currently selected category was removed, clear or select first available
     if (!newCategories.includes(selectedCategory)) {
       setSelectedCategory(newCategories[0] || "");
     }
@@ -66,65 +94,65 @@ export default function LeadFinderPage() {
   // Update Countries & Persist
   const handleCountriesChange = (newCountries: string[]) => {
     updateCountries(newCountries);
-    // If currently selected country was removed, clear or select first available
     if (!newCountries.includes(selectedCountry)) {
       setSelectedCountry(newCountries[0] || "");
     }
   };
 
-  // Save Recent Search
-  const saveRecentSearch = (category: string, country: string, city: string) => {
-    const newItem: RecentSearchItem = {
-      id: "search-" + Date.now(),
-      category,
-      country,
-      city,
-      timestamp: new Date().toISOString(),
-    };
-
-    const updated = [
-      newItem,
-      ...recentSearches.filter(
-        (s) =>
-          !(
-            s.category.toLowerCase() === category.toLowerCase() &&
-            s.country.toLowerCase() === country.toLowerCase() &&
-            s.city.toLowerCase() === city.toLowerCase()
-          )
-      ),
-    ].slice(0, 10);
-
-    setRecentSearches(updated);
+  // Save Recent Search to MongoDB
+  const saveRecentSearch = async (category: string, country: string, city: string) => {
     try {
-      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      const res = await fetch("/api/google-maps-searches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, country, city }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.search) {
+          setRecentSearches((prev) => [
+            data.search,
+            ...prev.filter(
+              (s) =>
+                s.id !== data.search.id &&
+                !(
+                  s.category.toLowerCase() === data.search.category.toLowerCase() &&
+                  s.country.toLowerCase() === data.search.country.toLowerCase() &&
+                  s.city.toLowerCase() === data.search.city.toLowerCase()
+                )
+            ),
+          ].slice(0, 10));
+        }
+      }
     } catch (err) {
-      console.error("Failed to save recent searches:", err);
+      console.error("Failed to save search to database:", err);
     }
   };
 
-  // Clear Recent Searches
-  const handleClearRecentSearches = () => {
-    setRecentSearches([]);
+  // Clear Recent Searches in MongoDB
+  const handleClearRecentSearches = async () => {
     try {
-      localStorage.removeItem(RECENT_SEARCHES_KEY);
+      const res = await fetch("/api/google-maps-searches", { method: "DELETE" });
+      if (res.ok) {
+        setRecentSearches([]);
+        showToast({
+          type: "info",
+          title: "History Cleared",
+          message: "Recent search history removed from database.",
+        });
+      }
     } catch (err) {
-      console.error("Failed to clear recent searches:", err);
+      console.error("Failed to clear searches:", err);
     }
-    showToast({
-      type: "info",
-      title: "History Cleared",
-      message: "Recent search history has been cleared.",
-    });
   };
 
-  // Remove Single Recent Search
-  const handleRemoveRecentSearchItem = (id: string) => {
-    const updated = recentSearches.filter((item) => item.id !== id);
-    setRecentSearches(updated);
+  // Remove Single Recent Search in MongoDB
+  const handleRemoveRecentSearchItem = async (id: string) => {
     try {
-      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      setRecentSearches((prev) => prev.filter((s) => s.id !== id));
+      await fetch(`/api/google-maps-searches/${id}`, { method: "DELETE" });
     } catch (err) {
-      console.error("Failed to update recent searches:", err);
+      console.error("Failed to delete search item:", err);
     }
   };
 
@@ -132,7 +160,6 @@ export default function LeadFinderPage() {
   const handleSearchGoogleMaps = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    // 1. Validate Category
     if (!selectedCategory.trim()) {
       showToast({
         type: "warning",
@@ -142,7 +169,6 @@ export default function LeadFinderPage() {
       return;
     }
 
-    // 2. Validate Country
     if (!selectedCountry.trim()) {
       showToast({
         type: "warning",
@@ -152,7 +178,6 @@ export default function LeadFinderPage() {
       return;
     }
 
-    // 3. Validate City
     if (!cityLocation.trim()) {
       showToast({
         type: "warning",
@@ -162,14 +187,10 @@ export default function LeadFinderPage() {
       return;
     }
 
-    // Construct Search Query: Category, City, Country
     const query = `${selectedCategory.trim()}, ${cityLocation.trim()}, ${selectedCountry.trim()}`;
     const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
 
-    // Open Google Maps in new browser tab
     window.open(mapsUrl, "_blank", "noopener,noreferrer");
-
-    // Save to Recent Searches
     saveRecentSearch(selectedCategory.trim(), selectedCountry.trim(), cityLocation.trim());
 
     showToast({
@@ -199,8 +220,191 @@ export default function LeadFinderPage() {
     });
   };
 
+  // Toggle Checkbox for moving to / removing from Leads
+  const handleToggleSelectBusiness = async (business: LeadFinderBusinessItem) => {
+    const nextSelected = !business.isSelected;
+
+    try {
+      const res = await fetch(`/api/lead-finder/${business.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isSelected: nextSelected }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast({
+          type: "warning",
+          title: "Action Restricted",
+          message: data.error || "Cannot modify lead status.",
+        });
+        return;
+      }
+
+      if (data.business) {
+        setFinderBusinesses((prev) =>
+          prev.map((b) => (b.id === business.id ? data.business : b))
+        );
+      }
+
+      // Refresh Leads list in CRM context
+      await refreshData();
+      await refreshStats();
+
+      showToast({
+        type: "success",
+        title: nextSelected ? "Moved to Leads" : "Removed from Leads",
+        message: nextSelected
+          ? `"${business.businessName}" is now available in your Leads route.`
+          : `"${business.businessName}" removed from Leads.`,
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Action Failed",
+        message: err.message || "Failed to update lead selection.",
+      });
+    }
+  };
+
+  // All Leads confirmation action
+  const handleSelectAllEligible = async () => {
+    try {
+      const res = await fetch("/api/lead-finder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "selectAll" }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast({
+          type: "error",
+          title: "Confirmation Failed",
+          message: data.error || "Failed to confirm all leads.",
+        });
+        return;
+      }
+
+      await fetchFinderBusinesses();
+      await refreshData();
+      await refreshStats();
+
+      showToast({
+        type: "success",
+        title: "All Leads Confirmed!",
+        message: data.message || "All eligible businesses have been added to Leads.",
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Action Failed",
+        message: err.message,
+      });
+    }
+  };
+
+  // Open Edit Business Modal
+  const handleOpenEditModal = (business: LeadFinderBusinessItem) => {
+    setEditingBusiness(business);
+    setIsEditModalOpen(true);
+  };
+
+  // Save updates from Edit Modal
+  const handleSaveBusinessUpdates = async (
+    id: string,
+    updates: Partial<LeadFinderBusinessItem>
+  ): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/lead-finder/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast({
+          type: "error",
+          title: "Update Failed",
+          message: data.error || "Failed to update business.",
+        });
+        return false;
+      }
+
+      if (data.business) {
+        setFinderBusinesses((prev) =>
+          prev.map((b) => (b.id === id ? data.business : b))
+        );
+      }
+
+      await refreshData();
+
+      showToast({
+        type: "success",
+        title: "Business Updated",
+        message: "Changes saved to database.",
+      });
+      return true;
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Update Failed",
+        message: err.message,
+      });
+      return false;
+    }
+  };
+
+  // Delete Business from Finder
+  const handleDeleteBusiness = async (business: LeadFinderBusinessItem) => {
+    const isProtected = business.isConnected;
+    const confirmPrompt = isProtected
+      ? `Delete "${business.businessName}" from Lead Finder?\n\nNote: Because this is a Protected Connected Lead, it will remain 100% safe in your Leads data.`
+      : `Delete "${business.businessName}" from Lead Finder?`;
+
+    if (!window.confirm(confirmPrompt)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/lead-finder/${business.id}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast({
+          type: "error",
+          title: "Delete Failed",
+          message: data.error || "Failed to delete business.",
+        });
+        return;
+      }
+
+      setFinderBusinesses((prev) => prev.filter((b) => b.id !== business.id));
+      await refreshStats();
+
+      showToast({
+        type: "warning",
+        title: "Finder Record Deleted",
+        message: data.message || `"${business.businessName}" removed from Lead Finder.`,
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Delete Failed",
+        message: err.message,
+      });
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Top Search Card: Find Businesses on Google Maps */}
       <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-5">
         {/* Header with Title and Manage Button */}
@@ -310,7 +514,20 @@ export default function LeadFinderPage() {
         </div>
       </div>
 
-      {/* Recent Searches Section */}
+      {/* Saved Google Maps Businesses Table */}
+      <section className="space-y-4">
+        <LeadFinderTable
+          businesses={finderBusinesses}
+          isLoading={isLoadingBusinesses}
+          categories={categories}
+          onToggleSelect={handleToggleSelectBusiness}
+          onSelectAllEligible={handleSelectAllEligible}
+          onEditBusiness={handleOpenEditModal}
+          onDeleteBusiness={handleDeleteBusiness}
+        />
+      </section>
+
+      {/* Recent Searches Section (MongoDB-Backed) */}
       <RecentSearches
         searches={recentSearches}
         onSearchAgain={handleSearchAgain}
@@ -318,14 +535,14 @@ export default function LeadFinderPage() {
         onRemoveItem={handleRemoveRecentSearchItem}
       />
 
-      {/* Pro Tips / Workflow Guide Card */}
+      {/* Quick Client Hunting Tips Card */}
       <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 border border-slate-200/80 shadow-2xs space-y-3">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
             <Lightbulb className="w-3.5 h-3.5" />
           </div>
           <h3 className="text-xs sm:text-sm font-bold text-slate-900">
-            Quick Client Hunting Tips
+            Client Hunting &amp; Lead Finder Workflow
           </h3>
         </div>
 
@@ -335,10 +552,10 @@ export default function LeadFinderPage() {
               <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 font-bold text-[11px] flex items-center justify-center">
                 1
               </span>
-              <span>Target Local Niches</span>
+              <span>Scrape &amp; Save from Extension</span>
             </p>
             <p className="text-slate-500 leading-relaxed text-[11px]">
-              Select high-ticket local services like Cleaning, Roofing, Dental, or Law firms to find businesses actively spending on marketing.
+              Open Google Maps with your extension, select candidate businesses, and click &quot;Save Data&quot; to import them directly here.
             </p>
           </div>
 
@@ -347,10 +564,10 @@ export default function LeadFinderPage() {
               <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 font-bold text-[11px] flex items-center justify-center">
                 2
               </span>
-              <span>Find Website Gaps</span>
+              <span>Review &amp; Select for Leads</span>
             </p>
             <p className="text-slate-500 leading-relaxed text-[11px]">
-              On Google Maps, filter for businesses missing official websites or running outdated designs to pitch redesigns and SEO services.
+              Review business ratings, reviews, and hours in this table. Check businesses individually or click &quot;All Leads&quot; to move them to the Leads route.
             </p>
           </div>
 
@@ -359,14 +576,26 @@ export default function LeadFinderPage() {
               <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 font-bold text-[11px] flex items-center justify-center">
                 3
               </span>
-              <span>Manage Options Easily</span>
+              <span>Connected Lead Protection</span>
             </p>
             <p className="text-slate-500 leading-relaxed text-[11px]">
-              Use &quot;Manage Categories &amp; Countries&quot; to quickly add custom niches, target regions, or remove categories you don&apos;t service.
+              Once you start outreach from the Leads route, the lead becomes Connected. Connected leads are protected from accidental removal or unchecking.
             </p>
           </div>
         </div>
       </div>
+
+      {/* Edit Finder Business Modal */}
+      <EditFinderBusinessModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingBusiness(null);
+        }}
+        business={editingBusiness}
+        onSave={handleSaveBusinessUpdates}
+        categories={categories}
+      />
 
       {/* Categories & Countries Management Modal */}
       <ManageOptionsModal

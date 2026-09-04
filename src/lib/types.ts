@@ -4,6 +4,7 @@ export type LeadStatus =
   | 'New'
   | 'Qualified'
   | 'Contacted'
+  | 'Connected'
   | 'Replied'
   | 'Interested'
   | 'Follow-up'
@@ -55,9 +56,32 @@ export interface Lead {
   status: LeadStatus;
   lastContact?: string;
   dateAdded: string;
+  foundAt?: string;
+  finderBusinessId?: string;
   notes?: string;
   activities: ActivityItem[];
   avatarColor?: string;
+}
+
+export interface LeadFinderBusinessItem {
+  id: string;
+  businessName: string;
+  rating?: number | null;
+  totalReviews?: number | null;
+  openClosed?: string | null;
+  openingHours?: string | null;
+  businessCategory?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  fullAddress?: string | null;
+  googleMapsUrl?: string | null;
+  foundAt: string;
+  isSelected: boolean;
+  leadId?: string | null;
+  isConnected?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FollowUpItem {
@@ -143,4 +167,6 @@ export interface LeadFiltersState {
   location: string;
   channel: Channel | 'all';
   dateAdded: string;
+  customStartDate?: string;
+  customEndDate?: string;
 }

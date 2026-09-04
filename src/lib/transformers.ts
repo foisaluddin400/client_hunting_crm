@@ -6,6 +6,7 @@ import {
   WebsiteStatus,
   LeadStatus,
   Channel,
+  LeadFinderBusinessItem,
 } from "./types";
 import { ILead, DbWebsiteStatus, DbLeadStatus } from "./models/Lead";
 import { IFollowUp } from "./models/FollowUp";
@@ -55,6 +56,8 @@ export function toDbLeadStatus(status?: string): DbLeadStatus {
       return "QUALIFIED";
     case "contacted":
       return "CONTACTED";
+    case "connected":
+      return "CONNECTED";
     case "replied":
       return "REPLIED";
     case "interested":
@@ -86,6 +89,8 @@ export function fromDbLeadStatus(status?: string): LeadStatus {
       return "Qualified";
     case "CONTACTED":
       return "Contacted";
+    case "CONNECTED":
+      return "Connected";
     case "REPLIED":
       return "Replied";
     case "INTERESTED":
@@ -118,6 +123,12 @@ export function transformLead(
     ? new Date(doc.lastContactAt).toISOString().split("T")[0]
     : undefined;
 
+  const foundAtStr = doc.foundAt
+    ? new Date(doc.foundAt).toISOString()
+    : doc.createdAt
+    ? new Date(doc.createdAt).toISOString()
+    : undefined;
+
   return {
     id: doc._id ? doc._id.toString() : doc.id,
     businessName: doc.businessName,
@@ -137,9 +148,48 @@ export function transformLead(
     status: fromDbLeadStatus(doc.leadStatus),
     lastContact: lastContactStr,
     dateAdded: dateAddedStr,
+    foundAt: foundAtStr,
+    finderBusinessId: doc.finderBusinessId ? doc.finderBusinessId.toString() : undefined,
     notes: doc.notes || undefined,
     avatarColor: doc.avatarColor || "bg-indigo-600",
     activities: activities.map((a) => transformActivity(a)),
+  };
+}
+
+// Transform LeadFinderBusiness DB Document to frontend LeadFinderBusinessItem
+export function transformLeadFinderBusiness(
+  doc: any,
+  connectedLeadStatus?: string | null
+): LeadFinderBusinessItem {
+  const isLeadConnected =
+    connectedLeadStatus === "CONNECTED" ||
+    connectedLeadStatus === "CONTACTED" ||
+    connectedLeadStatus === "REPLIED" ||
+    connectedLeadStatus === "INTERESTED" ||
+    connectedLeadStatus === "FOLLOW_UP" ||
+    connectedLeadStatus === "MEETING" ||
+    connectedLeadStatus === "PROPOSAL" ||
+    connectedLeadStatus === "WON";
+
+  return {
+    id: doc._id ? doc._id.toString() : doc.id,
+    businessName: doc.businessName,
+    rating: doc.rating ?? null,
+    totalReviews: doc.totalReviews ?? null,
+    openClosed: doc.openClosed ?? null,
+    openingHours: doc.openingHours ?? null,
+    businessCategory: doc.businessCategory ?? null,
+    phone: doc.phone ?? null,
+    email: doc.email ?? null,
+    website: doc.website ?? null,
+    fullAddress: doc.fullAddress ?? null,
+    googleMapsUrl: doc.googleMapsUrl ?? null,
+    foundAt: doc.foundAt ? new Date(doc.foundAt).toISOString() : new Date().toISOString(),
+    isSelected: Boolean(doc.isConfirmed ?? doc.isSelected),
+    leadId: doc.leadId ? doc.leadId.toString() : null,
+    isConnected: Boolean(isLeadConnected),
+    createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
+    updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
   };
 }
 

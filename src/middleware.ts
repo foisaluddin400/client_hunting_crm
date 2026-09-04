@@ -54,9 +54,32 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // Handle Chrome Extension CORS preflight and requests
+  const origin = req.headers.get("origin") || "";
+  const isExtension = origin.startsWith("chrome-extension://");
+
+  if (pathname.startsWith("/api/")) {
+    if (req.method === "OPTIONS") {
+      const preflight = new NextResponse(null, { status: 204 });
+      if (isExtension) {
+        preflight.headers.set("Access-Control-Allow-Origin", origin);
+        preflight.headers.set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
+        preflight.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        preflight.headers.set("Access-Control-Allow-Credentials", "true");
+        preflight.headers.set("Access-Control-Max-Age", "86400");
+      }
+      return preflight;
+    }
+  }
+
   // 3. Handle public API routes - allow through
   if (isPublicApiRoute) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    if (isExtension) {
+      res.headers.set("Access-Control-Allow-Origin", origin);
+      res.headers.set("Access-Control-Allow-Credentials", "true");
+    }
+    return res;
   }
 
   // 4. Authenticated user attempting to visit login/signup/forgot-password
@@ -68,7 +91,12 @@ export async function middleware(req: NextRequest) {
   if (!isAuthenticated && !isPublicAuthPage) {
     // For protected API routes, let route handlers return structured 401 JSON
     if (pathname.startsWith("/api/")) {
-      return NextResponse.next();
+      const apiRes = NextResponse.next();
+      if (isExtension) {
+        apiRes.headers.set("Access-Control-Allow-Origin", origin);
+        apiRes.headers.set("Access-Control-Allow-Credentials", "true");
+      }
+      return apiRes;
     }
 
     // For dashboard pages, redirect to /login
@@ -90,7 +118,12 @@ export async function middleware(req: NextRequest) {
     return response;
   }
 
-  return NextResponse.next();
+  const finalRes = NextResponse.next();
+  if (pathname.startsWith("/api/") && isExtension) {
+    finalRes.headers.set("Access-Control-Allow-Origin", origin);
+    finalRes.headers.set("Access-Control-Allow-Credentials", "true");
+  }
+  return finalRes;
 }
 
 export const config = {

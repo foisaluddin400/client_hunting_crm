@@ -39,6 +39,11 @@ export function LeadStatusBadge({
       dot: "bg-indigo-500",
       text: "Contacted",
     },
+    Connected: {
+      bg: "bg-teal-50 border-teal-200 text-teal-700",
+      dot: "bg-teal-500",
+      text: "Connected 🤝",
+    },
     Replied: {
       bg: "bg-purple-50 border-purple-200 text-purple-700",
       dot: "bg-purple-500",

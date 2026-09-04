@@ -107,6 +107,33 @@ function LeadsContent() {
         if (filters.channel === "twitter" && !lead.twitter) return false;
       }
 
+      // Date / Time filter
+      if (filters.dateAdded && filters.dateAdded !== "all") {
+        const leadDateStr = lead.foundAt || lead.dateAdded;
+        const itemDate = new Date(leadDateStr);
+        const now = new Date();
+
+        if (filters.dateAdded === "today") {
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (itemDate < startOfToday) return false;
+        } else if (filters.dateAdded === "yesterday") {
+          const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (itemDate < startOfYesterday || itemDate >= endOfYesterday) return false;
+        } else if (filters.dateAdded === "7days") {
+          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          if (itemDate < sevenDaysAgo) return false;
+        } else if (filters.dateAdded === "30days") {
+          const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          if (itemDate < thirtyDaysAgo) return false;
+        } else if (filters.dateAdded === "custom" && filters.customStartDate) {
+          const start = new Date(filters.customStartDate);
+          const end = filters.customEndDate ? new Date(filters.customEndDate) : new Date();
+          end.setHours(23, 59, 59, 999);
+          if (itemDate < start || itemDate > end) return false;
+        }
+      }
+
       return true;
     });
   }, [leads, filters]);
@@ -120,6 +147,7 @@ function LeadsContent() {
     if (filters.niche) count++;
     if (filters.location) count++;
     if (filters.channel !== "all") count++;
+    if (filters.dateAdded && filters.dateAdded !== "all") count++;
     return count;
   }, [filters]);
 

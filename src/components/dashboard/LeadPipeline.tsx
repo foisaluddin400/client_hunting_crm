@@ -17,6 +17,7 @@ import {
   FileCheck2,
   Trophy,
   XCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { LeadStatusBadge } from "@/components/ui/Badge";
 
@@ -55,6 +56,14 @@ export function LeadPipeline() {
       color: "text-indigo-700",
       borderColor: "border-indigo-200",
       bgAccent: "bg-indigo-500",
+    },
+    {
+      status: "Connected",
+      label: "Connected 🤝",
+      icon: <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />,
+      color: "text-teal-700",
+      borderColor: "border-teal-200",
+      bgAccent: "bg-teal-500",
     },
     {
       status: "Replied",
@@ -111,6 +120,7 @@ export function LeadPipeline() {
     New: 0,
     Qualified: 0,
     Contacted: 0,
+    Connected: 0,
     Replied: 0,
     Interested: 0,
     "Follow-up": 0,

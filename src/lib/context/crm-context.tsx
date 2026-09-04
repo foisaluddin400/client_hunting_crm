@@ -66,6 +66,7 @@ interface ActiveRescheduleState {
 
 export interface DashboardStats {
   totalLeads: number;
+  totalLeadsFinder?: number;
   totalFollowUpsSent: number;
   emailCount: number;
   whatsappCount: number;

@@ -86,6 +86,7 @@ export function LeadFilters({
             <option value="New">New</option>
             <option value="Qualified">Qualified</option>
             <option value="Contacted">Contacted</option>
+            <option value="Connected">Connected 🛡</option>
             <option value="Replied">Replied</option>
             <option value="Interested">Interested 🔥</option>
             <option value="Follow-up">Follow-up</option>
@@ -93,6 +94,24 @@ export function LeadFilters({
             <option value="Proposal">Proposal</option>
             <option value="Won">Won 🎉</option>
             <option value="Lost">Lost</option>
+          </select>
+
+          {/* Date & Time Filter */}
+          <select
+            value={filters.dateAdded || "all"}
+            onChange={(e) =>
+              onFilterChange({
+                dateAdded: e.target.value,
+              })
+            }
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
+          >
+            <option value="all">Date: All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="7days">Last 7 days</option>
+            <option value="30days">Last 30 days</option>
+            <option value="custom">Custom Range...</option>
           </select>
 
           {/* Toggle Advanced Filters */}
@@ -124,6 +143,31 @@ export function LeadFilters({
           )}
         </div>
       </div>
+
+      {/* Custom Date Range Picker */}
+      {filters.dateAdded === "custom" && (
+        <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 flex flex-wrap items-center gap-3 text-xs animate-in fade-in duration-150">
+          <span className="font-bold text-indigo-900">Custom Date Range:</span>
+          <div className="flex items-center gap-1.5">
+            <label className="text-slate-600">From:</label>
+            <input
+              type="date"
+              value={filters.customStartDate || ""}
+              onChange={(e) => onFilterChange({ customStartDate: e.target.value })}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-slate-600">To:</label>
+            <input
+              type="date"
+              value={filters.customEndDate || ""}
+              onChange={(e) => onFilterChange({ customEndDate: e.target.value })}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Advanced Filters Expandable Drawer */}
       {showAdvanced && (
@@ -255,6 +299,18 @@ export function LeadFilters({
               Channel: {filters.channel}
               <button
                 onClick={() => onFilterChange({ channel: "all" })}
+                className="hover:text-indigo-950"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {filters.dateAdded && filters.dateAdded !== "all" && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-xs text-indigo-800 font-medium capitalize">
+              Date: {filters.dateAdded === "custom" ? `${filters.customStartDate || "Start"} - ${filters.customEndDate || "End"}` : filters.dateAdded}
+              <button
+                onClick={() => onFilterChange({ dateAdded: "all", customStartDate: "", customEndDate: "" })}
                 className="hover:text-indigo-950"
               >
                 <X className="w-3 h-3" />

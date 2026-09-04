@@ -37,6 +37,20 @@ interface LeadTableProps {
   isLoading?: boolean;
 }
 
+function formatLeadDateTime(dateStr?: string) {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
 export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
   const {
     openLeadDetails,
@@ -149,6 +163,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                 <th className="p-4">Website Status</th>
                 <th className="p-4 text-center">Outreach Channels</th>
                 <th className="p-4">Lead Status</th>
+                <th className="p-4">Date & Time</th>
                 <th className="p-4">Last Contact</th>
                 <th className="p-4 text-right">Actions</th>
               </tr>
@@ -157,7 +172,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
             <tbody className="divide-y divide-slate-100 text-xs">
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRowSkeleton key={i} columns={8} />
+                  <TableRowSkeleton key={i} columns={9} />
                 ))
               ) : paginatedLeads.length > 0 ? (
                 paginatedLeads.map((lead) => {
@@ -376,6 +391,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                           <option value="New">New</option>
                           <option value="Qualified">Qualified</option>
                           <option value="Contacted">Contacted</option>
+                          <option value="Connected">Connected 🤝</option>
                           <option value="Replied">Replied</option>
                           <option value="Interested">Interested 🔥</option>
                           <option value="Follow-up">Follow-up</option>
@@ -384,6 +400,13 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                           <option value="Won">Won 🎉</option>
                           <option value="Lost">Lost</option>
                         </select>
+                      </td>
+
+                      {/* Date & Time */}
+                      <td className="p-4 text-slate-600 text-[11px] whitespace-nowrap">
+                        <span className="font-medium text-slate-700">
+                          {formatLeadDateTime(lead.foundAt || lead.dateAdded)}
+                        </span>
                       </td>
 
                       {/* Last Contact */}

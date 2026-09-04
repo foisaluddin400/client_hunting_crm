@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import connectToDatabase from "@/lib/mongodb";
-import { Lead, OutreachActivity, FollowUp } from "@/lib/models";
+import { Lead, OutreachActivity, FollowUp, LeadFinderBusiness } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { fromDbLeadStatus } from "@/lib/transformers";
 
@@ -17,9 +17,11 @@ export async function GET(req: NextRequest) {
     const userId = authUser.userId;
     const userObjectId = new Types.ObjectId(userId);
 
-    // 1. KPI Counts - Unique clients per channel & total follow-ups sent
+    // 1. KPI Counts - Unique clients per channel, total leads finder & total follow-ups sent
     const [
       totalLeads,
+      totalLeadsFinder,
+      completedFollowUpsCount,
       emailOutreachLeadIds,
       emailFollowUpLeadIds,
       whatsappOutreachLeadIds,
@@ -32,8 +34,6 @@ export async function GET(req: NextRequest) {
       instagramFollowUpLeadIds,
       facebookOutreachLeadIds,
       facebookFollowUpLeadIds,
-      allOutreachLeadIds,
-      allFollowUpLeadIds,
       emailsSent,
       whatsappPrepared,
       repliesCount,
@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
       todayFollowUps,
     ] = await Promise.all([
       Lead.countDocuments({ userId }),
+      LeadFinderBusiness.countDocuments({ userId }),
+      FollowUp.countDocuments({ userId, status: "COMPLETED" }),
       OutreachActivity.distinct("leadId", { userId, channel: "EMAIL" }),
       FollowUp.distinct("leadId", { userId, channel: "email" }),
       OutreachActivity.distinct("leadId", { userId, channel: "WHATSAPP" }),
@@ -59,8 +61,6 @@ export async function GET(req: NextRequest) {
       FollowUp.distinct("leadId", { userId, channel: "instagram" }),
       OutreachActivity.distinct("leadId", { userId, channel: "FACEBOOK" }),
       FollowUp.distinct("leadId", { userId, channel: "facebook" }),
-      OutreachActivity.distinct("leadId", { userId }),
-      FollowUp.distinct("leadId", { userId }),
       OutreachActivity.countDocuments({ userId, channel: "EMAIL", status: "SENT" }),
       OutreachActivity.countDocuments({ userId, channel: "WHATSAPP" }),
       Lead.countDocuments({ userId, leadStatus: "REPLIED" }),
@@ -105,10 +105,8 @@ export async function GET(req: NextRequest) {
       ...facebookFollowUpLeadIds.map((id) => id.toString()),
     ]).size;
 
-    const totalFollowUpsSent = new Set([
-      ...allOutreachLeadIds.map((id) => id.toString()),
-      ...allFollowUpLeadIds.map((id) => id.toString()),
-    ]).size;
+    // Requirement 16: Count actual follow-up actions/records completed from the Follow-up system
+    const totalFollowUpsSent = completedFollowUpsCount;
 
     // 2. Pipeline breakdown aggregation
     const pipelineAggregation = await Lead.aggregate([
@@ -188,6 +186,7 @@ export async function GET(req: NextRequest) {
       success: true,
       stats: {
         totalLeads,
+        totalLeadsFinder,
         totalFollowUpsSent,
         emailCount,
         whatsappCount,

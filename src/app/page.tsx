@@ -158,7 +158,7 @@ export default function DashboardPage() {
           <span className="text-xs text-slate-400">Unique client counts</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <KpiCard
             title="Total Leads"
             value={totalLeadsCount.toLocaleString()}
@@ -166,22 +166,36 @@ export default function DashboardPage() {
             changeType="increase"
             icon={<Users className="w-5 h-5 text-indigo-600" />}
             iconBgColor="bg-indigo-50 text-indigo-600"
-            description="Active prospect pool"
+            description="Active confirmed prospect pool"
             highlight
           />
 
           <KpiCard
-            title="Total Follow-ups Sent"
-            value={metrics.totalFollowUpsSent.toLocaleString()}
+            title="Total Leads Finder"
+            value={(stats?.totalLeadsFinder ?? 0).toLocaleString()}
             change={
-              metrics.totalFollowUpsSent > 0
-                ? `${metrics.totalFollowUpsSent} clients`
-                : "0 clients"
+              (stats?.totalLeadsFinder ?? 0) > 0
+                ? `${stats?.totalLeadsFinder} collected`
+                : "0 collected"
+            }
+            changeType="increase"
+            icon={<Compass className="w-5 h-5 text-purple-600" />}
+            iconBgColor="bg-purple-50 text-purple-600"
+            description="Saved in Lead Finder database"
+          />
+
+          <KpiCard
+            title="Total Follow-ups Sent"
+            value={(stats?.totalFollowUpsSent ?? 0).toLocaleString()}
+            change={
+              (stats?.totalFollowUpsSent ?? 0) > 0
+                ? `${stats?.totalFollowUpsSent} completed`
+                : "0 completed"
             }
             changeType="increase"
             icon={<CalendarCheck className="w-5 h-5 text-amber-600" />}
             iconBgColor="bg-amber-50 text-amber-600"
-            description="Unique clients reached"
+            description="Completed follow-up actions"
           />
 
           <KpiCard
