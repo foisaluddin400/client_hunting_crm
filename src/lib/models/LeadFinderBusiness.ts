@@ -10,6 +10,11 @@ export interface ILeadFinderBusiness extends Document {
   businessCategory?: string | null;
   phone?: string | null;
   email?: string | null;
+  whatsapp?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
+  linkedin?: string | null;
+  twitter?: string | null;
   website?: string | null;
   fullAddress?: string | null;
   googleMapsUrl?: string | null;
@@ -68,6 +73,31 @@ const LeadFinderBusinessSchema = new Schema<ILeadFinderBusiness>(
       default: null,
       trim: true,
       lowercase: true,
+    },
+    whatsapp: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    facebook: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    instagram: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    linkedin: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    twitter: {
+      type: String,
+      default: null,
+      trim: true,
     },
     website: {
       type: String,

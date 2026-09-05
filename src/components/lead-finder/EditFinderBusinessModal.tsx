@@ -4,7 +4,13 @@ import React, { useState, useEffect } from "react";
 import { LeadFinderBusinessItem } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { Building2, Phone, Mail, Globe, MapPin, Tag } from "lucide-react";
+import { Building2, Phone, Mail, Globe, MapPin, Tag, MessageSquare } from "lucide-react";
+import {
+  TwitterXIcon,
+  LinkedinIcon,
+  InstagramIcon,
+  FacebookIcon,
+} from "@/components/ui/Icons";
 
 interface EditFinderBusinessModalProps {
   isOpen: boolean;
@@ -23,10 +29,15 @@ export function EditFinderBusinessModal({
 }: EditFinderBusinessModalProps) {
   const [businessName, setBusinessName] = useState("");
   const [phone, setPhone] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
   const [fullAddress, setFullAddress] = useState("");
   const [businessCategory, setBusinessCategory] = useState("");
+  const [facebook, setFacebook] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [twitter, setTwitter] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,10 +45,15 @@ export function EditFinderBusinessModal({
     if (business) {
       setBusinessName(business.businessName || "");
       setPhone(business.phone || "");
+      setWhatsapp(business.whatsapp || business.phone || "");
       setEmail(business.email || "");
       setWebsite(business.website || "");
       setFullAddress(business.fullAddress || "");
       setBusinessCategory(business.businessCategory || "");
+      setFacebook(business.facebook || "");
+      setInstagram(business.instagram || "");
+      setLinkedin(business.linkedin || "");
+      setTwitter(business.twitter || "");
       setError(null);
     }
   }, [business]);
@@ -57,10 +73,15 @@ export function EditFinderBusinessModal({
     const success = await onSave(business.id, {
       businessName: businessName.trim(),
       phone: phone.trim() || null,
+      whatsapp: whatsapp.trim() || null,
       email: email.trim() || null,
       website: website.trim() || null,
       fullAddress: fullAddress.trim() || null,
       businessCategory: businessCategory.trim() || null,
+      facebook: facebook.trim() || null,
+      instagram: instagram.trim() || null,
+      linkedin: linkedin.trim() || null,
+      twitter: twitter.trim() || null,
     });
 
     setIsSaving(false);
@@ -102,7 +123,7 @@ export function EditFinderBusinessModal({
           </div>
         </div>
 
-        {/* Category & Phone */}
+        {/* Category & Address */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-semibold text-slate-700 block mb-1">
@@ -128,6 +149,25 @@ export function EditFinderBusinessModal({
 
           <div>
             <label className="text-xs font-semibold text-slate-700 block mb-1">
+              Full Address / Location
+            </label>
+            <div className="relative flex items-center">
+              <MapPin className="absolute left-3 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={fullAddress}
+                onChange={(e) => setFullAddress(e.target.value)}
+                placeholder="e.g. 123 Main St, Edmonton, AB"
+                className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Phone & WhatsApp */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-slate-700 block mb-1">
               Phone Number
             </label>
             <div className="relative flex items-center">
@@ -136,6 +176,22 @@ export function EditFinderBusinessModal({
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +1 555-123-4567"
+                className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-700 block mb-1">
+              WhatsApp Number
+            </label>
+            <div className="relative flex items-center">
+              <MessageSquare className="absolute left-3 w-4 h-4 text-emerald-500 pointer-events-none" />
+              <input
+                type="text"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
                 placeholder="e.g. +1 555-123-4567"
                 className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
               />
@@ -178,20 +234,83 @@ export function EditFinderBusinessModal({
           </div>
         </div>
 
-        {/* Full Address */}
-        <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1">
-            Full Address / Location
+        {/* Social Media Channels */}
+        <div className="pt-2 border-t border-slate-100 space-y-3">
+          <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+            Social Media Channels
           </label>
-          <div className="relative flex items-center">
-            <MapPin className="absolute left-3 w-4 h-4 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              value={fullAddress}
-              onChange={(e) => setFullAddress(e.target.value)}
-              placeholder="e.g. 123 Main St, Edmonton, AB"
-              className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Facebook
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute left-3 pointer-events-none">
+                  <FacebookIcon className="w-4 h-4 text-[#1877F2]" />
+                </div>
+                <input
+                  type="text"
+                  value={facebook}
+                  onChange={(e) => setFacebook(e.target.value)}
+                  placeholder="https://facebook.com/page"
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Instagram
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute left-3 pointer-events-none">
+                  <InstagramIcon className="w-4 h-4 text-[#E1306C]" />
+                </div>
+                <input
+                  type="text"
+                  value={instagram}
+                  onChange={(e) => setInstagram(e.target.value)}
+                  placeholder="https://instagram.com/handle"
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                LinkedIn
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute left-3 pointer-events-none">
+                  <LinkedinIcon className="w-4 h-4 text-[#0A66C2]" />
+                </div>
+                <input
+                  type="text"
+                  value={linkedin}
+                  onChange={(e) => setLinkedin(e.target.value)}
+                  placeholder="https://linkedin.com/company/..."
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Twitter / X
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute left-3 pointer-events-none">
+                  <TwitterXIcon className="w-4 h-4 text-slate-800" />
+                </div>
+                <input
+                  type="text"
+                  value={twitter}
+                  onChange={(e) => setTwitter(e.target.value)}
+                  placeholder="https://x.com/handle"
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
           </div>
         </div>
 

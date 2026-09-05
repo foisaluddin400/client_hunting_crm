@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     const finderDocs = await LeadFinderBusiness.find(query)
       .populate({
         path: "leadId",
-        select: "leadStatus",
+        select: "leadStatus email whatsapp facebook instagram linkedin twitter",
       })
       .sort({ foundAt: -1 })
       .lean();
@@ -130,25 +130,56 @@ export async function POST(req: NextRequest) {
       let addedCount = 0;
 
       for (const finder of unselectedFinderList) {
-        // Create corresponding Lead in /leads
-        const newLead = await Lead.create({
+        const leadWhatsapp = finder.whatsapp || finder.phone || undefined;
+        const leadPhone = finder.phone || finder.whatsapp || undefined;
+
+        // Check if lead already exists for this finder business
+        let targetLead = await Lead.findOne({
+          $or: [{ finderBusinessId: finder._id }, ...(finder.leadId ? [{ _id: finder.leadId }] : [])],
           userId,
-          businessName: finder.businessName,
-          industry: finder.businessCategory || "Other",
-          location: finder.fullAddress || "Not specified",
-          website: finder.website || undefined,
-          websiteStatus: finder.website ? "OTHER" : "NO_WEBSITE",
-          email: finder.email || undefined,
-          phone: finder.phone || undefined,
-          leadStatus: "NEW",
-          leadScore: 75,
-          notes: `Imported via Google Maps Lead Scraper (${finder.googleMapsUrl || ""})`,
-          finderBusinessId: finder._id,
-          foundAt: finder.foundAt || new Date(),
         });
 
+        if (!targetLead) {
+          targetLead = await Lead.create({
+            userId,
+            businessName: finder.businessName,
+            industry: finder.businessCategory || "Other",
+            location: finder.fullAddress || "Not specified",
+            website: finder.website || undefined,
+            websiteStatus: finder.website ? "OTHER" : "NO_WEBSITE",
+            email: finder.email || undefined,
+            phone: leadPhone,
+            whatsapp: leadWhatsapp,
+            facebook: finder.facebook || undefined,
+            instagram: finder.instagram || undefined,
+            linkedin: finder.linkedin || undefined,
+            twitter: finder.twitter || undefined,
+            leadStatus: "NEW",
+            leadScore: 75,
+            notes: `Imported via Google Maps Lead Scraper (${finder.googleMapsUrl || ""})`,
+            finderBusinessId: finder._id,
+            foundAt: finder.foundAt || new Date(),
+          });
+        } else {
+          targetLead.businessName = finder.businessName;
+          if (finder.businessCategory) targetLead.industry = finder.businessCategory;
+          if (finder.fullAddress) targetLead.location = finder.fullAddress;
+          if (finder.email) targetLead.email = finder.email;
+          if (leadWhatsapp) targetLead.whatsapp = leadWhatsapp;
+          if (leadPhone) targetLead.phone = leadPhone;
+          if (finder.facebook) targetLead.facebook = finder.facebook;
+          if (finder.instagram) targetLead.instagram = finder.instagram;
+          if (finder.linkedin) targetLead.linkedin = finder.linkedin;
+          if (finder.twitter) targetLead.twitter = finder.twitter;
+          if (finder.website) {
+            targetLead.website = finder.website;
+            targetLead.websiteStatus = "OTHER";
+          }
+          await targetLead.save();
+        }
+
         finder.isConfirmed = true;
-        finder.leadId = newLead._id as any;
+        finder.leadId = targetLead._id as any;
         await finder.save();
         addedCount++;
       }
