@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { LeadFinderBusinessItem } from "@/lib/types";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/Button";
@@ -28,6 +28,9 @@ import {
   Calendar,
   CheckCircle2,
   ShieldCheck,
+  MessageSquare,
+  RotateCcw,
+  X,
 } from "lucide-react";
 
 interface LeadFinderTableProps {
@@ -51,12 +54,96 @@ export function LeadFinderTable({
 }: LeadFinderTableProps) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [websiteFilter, setWebsiteFilter] = useState<"all" | "website" | "no_website">("all");
+  const [locationFilter, setLocationFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [timeFilter, setTimeFilter] = useState("all");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
+
+// Helper to normalize category strings for robust singular/plural and case-insensitive matching
+function normalizeCategory(str: string): string {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/ies\b/g, "y")
+    .replace(/es\b/g, "e")
+    .replace(/s\b/g, "");
+}
+
+function matchesCategoryFilter(businessCat: string | null | undefined, filterCat: string): boolean {
+  if (filterCat === "all") return true;
+  if (!businessCat) return false;
+
+  const bCat = businessCat.toLowerCase().trim();
+  const fCat = filterCat.toLowerCase().trim();
+  if (bCat === fCat) return true;
+
+  const normB = normalizeCategory(bCat);
+  const normF = normalizeCategory(fCat);
+  if (normB === normF) return true;
+
+  // Word boundary regex check
+  const escapedF = normF.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regexF = new RegExp(`\\b${escapedF}\\b`, "i");
+  if (regexF.test(normB)) return true;
+
+  const escapedB = normB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regexB = new RegExp(`\\b${escapedB}\\b`, "i");
+  if (regexB.test(normF)) return true;
+
+  return normB.includes(normF) || normF.includes(normB);
+}
+
+  // Dynamically compute category options combining CRM categories and detected business categories
+  const availableCategories = useMemo(() => {
+    const map = new Map<string, string>();
+    categories.forEach((c) => {
+      if (c && c.trim()) {
+        const key = c.trim().toLowerCase();
+        if (!map.has(key)) map.set(key, c.trim());
+      }
+    });
+    businesses.forEach((b) => {
+      if (b.businessCategory && b.businessCategory.trim()) {
+        const key = b.businessCategory.trim().toLowerCase();
+        if (!map.has(key)) map.set(key, b.businessCategory.trim());
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [categories, businesses]);
+
+  // Extract detected unique locations/cities for quick selection
+  const availableLocations = useMemo(() => {
+    const set = new Set<string>();
+    businesses.forEach((b) => {
+      if (b.fullAddress && b.fullAddress.trim()) {
+        const parts = b.fullAddress.split(",").map((p) => p.trim());
+        parts.forEach((p) => {
+          if (p.length > 2 && !/^\d+$/.test(p) && !/^\d{4,}/.test(p)) {
+            set.add(p);
+          }
+        });
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b)).slice(0, 50);
+  }, [businesses]);
+
+  // Reset pagination when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    search,
+    categoryFilter,
+    websiteFilter,
+    locationFilter,
+    statusFilter,
+    timeFilter,
+    customStartDate,
+    customEndDate,
+  ]);
 
   // Filtered businesses
   const filteredBusinesses = useMemo(() => {
@@ -66,25 +153,52 @@ export function LeadFinderTable({
         const q = search.toLowerCase();
         const matchName = b.businessName.toLowerCase().includes(q);
         const matchPhone = b.phone?.toLowerCase().includes(q);
+        const matchWhatsapp = b.whatsapp?.toLowerCase().includes(q);
         const matchEmail = b.email?.toLowerCase().includes(q);
         const matchAddr = b.fullAddress?.toLowerCase().includes(q);
         const matchCat = b.businessCategory?.toLowerCase().includes(q);
-        if (!matchName && !matchPhone && !matchEmail && !matchAddr && !matchCat) {
+        if (!matchName && !matchPhone && !matchWhatsapp && !matchEmail && !matchAddr && !matchCat) {
           return false;
         }
       }
 
-      // 2. Category
-      if (categoryFilter !== "all" && b.businessCategory !== categoryFilter) {
-        return false;
+      // 2. Category Filter (robust matching with singular/plural and case insensitivity)
+      if (categoryFilter !== "all") {
+        if (!matchesCategoryFilter(b.businessCategory, categoryFilter)) {
+          return false;
+        }
       }
 
-      // 3. Status
+      // 3. Website Filter
+      const hasValidWeb = Boolean(
+        b.website &&
+          b.website.trim().length > 0 &&
+          b.website.toLowerCase() !== "no website" &&
+          b.website.toLowerCase() !== "none" &&
+          b.website.toLowerCase() !== "n/a" &&
+          b.website.toLowerCase() !== "null" &&
+          b.website.toLowerCase() !== "undefined"
+      );
+
+      if (websiteFilter === "website") {
+        if (!hasValidWeb) return false;
+      } else if (websiteFilter === "no_website") {
+        if (hasValidWeb) return false;
+      }
+
+      // 4. Location / City Filter
+      if (locationFilter.trim()) {
+        const locQuery = locationFilter.toLowerCase().trim();
+        const addr = (b.fullAddress || "").toLowerCase();
+        if (!addr.includes(locQuery)) return false;
+      }
+
+      // 5. Status Filter
       if (statusFilter === "connected" && !b.isConnected) return false;
       if (statusFilter === "inLeads" && !b.isSelected) return false;
       if (statusFilter === "finderOnly" && b.isSelected) return false;
 
-      // 4. Date/Time Filter
+      // 6. Date/Time Filter
       if (timeFilter !== "all") {
         const itemDate = new Date(b.foundAt);
         const now = new Date();
@@ -116,6 +230,8 @@ export function LeadFinderTable({
     businesses,
     search,
     categoryFilter,
+    websiteFilter,
+    locationFilter,
     statusFilter,
     timeFilter,
     customStartDate,
@@ -208,12 +324,51 @@ export function LeadFinderTable({
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
             >
               <option value="all">All Categories</option>
-              {categories.map((c) => (
+              {availableCategories.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </select>
+
+            {/* Website Filter */}
+            <select
+              value={websiteFilter}
+              onChange={(e) => setWebsiteFilter(e.target.value as "all" | "website" | "no_website")}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="all">All</option>
+              <option value="website">Website</option>
+              <option value="no_website">No Website</option>
+            </select>
+
+            {/* Location / City Filter */}
+            <div className="relative flex items-center">
+              <MapPin className="absolute left-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                list="lead-finder-locations"
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                placeholder="Location / City..."
+                className="w-32 sm:w-40 rounded-lg border border-slate-200 bg-white pl-8 pr-6 py-2 text-xs font-semibold text-slate-700 shadow-2xs placeholder:text-slate-400 placeholder:font-normal focus:border-indigo-500 focus:outline-none"
+              />
+              <datalist id="lead-finder-locations">
+                {availableLocations.map((loc) => (
+                  <option key={loc} value={loc} />
+                ))}
+              </datalist>
+              {locationFilter && (
+                <button
+                  type="button"
+                  onClick={() => setLocationFilter("")}
+                  className="absolute right-2 text-slate-400 hover:text-slate-600 text-xs font-bold leading-none"
+                  title="Clear Location"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
 
             {/* Status Filter */}
             <select
@@ -240,6 +395,36 @@ export function LeadFinderTable({
               <option value="30days">Last 30 days</option>
               <option value="custom">Custom Range...</option>
             </select>
+
+            {/* Clear Filters Button */}
+            {(search ||
+              categoryFilter !== "all" ||
+              websiteFilter !== "all" ||
+              locationFilter.trim() ||
+              statusFilter !== "all" ||
+              timeFilter !== "all" ||
+              customStartDate ||
+              customEndDate) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setCategoryFilter("all");
+                  setWebsiteFilter("all");
+                  setLocationFilter("");
+                  setStatusFilter("all");
+                  setTimeFilter("all");
+                  setCustomStartDate("");
+                  setCustomEndDate("");
+                }}
+                leftIcon={<RotateCcw className="w-3 h-3 text-slate-400" />}
+                className="text-xs text-slate-500 hover:text-slate-900"
+              >
+                Clear
+              </Button>
+            )}
           </div>
         </div>
 
@@ -391,6 +576,13 @@ export function LeadFinderTable({
                             <div className="flex items-center gap-1.5 text-slate-700 font-mono text-[11px]">
                               <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                               <span>{business.phone}</span>
+                            </div>
+                          ) : null}
+
+                          {business.whatsapp ? (
+                            <div className="flex items-center gap-1.5 text-emerald-700 font-mono text-[11px]">
+                              <MessageSquare className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span>{business.whatsapp}</span>
                             </div>
                           ) : null}
 

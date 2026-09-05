@@ -138,13 +138,23 @@ export function transformLead(
     website: doc.website || undefined,
     websiteStatus: fromDbWebsiteStatus(doc.websiteStatus),
     leadScore: doc.leadScore || 75,
-    email: doc.email || undefined,
-    whatsapp: doc.whatsapp || undefined,
-    phone: doc.phone || undefined,
-    linkedin: doc.linkedin || undefined,
-    instagram: doc.instagram || undefined,
-    facebook: doc.facebook || undefined,
-    twitter: doc.twitter || undefined,
+    email: doc.email || (doc.finderBusinessId as any)?.email || undefined,
+    whatsapp:
+      doc.whatsapp ||
+      (doc.finderBusinessId as any)?.whatsapp ||
+      doc.phone ||
+      (doc.finderBusinessId as any)?.phone ||
+      undefined,
+    phone:
+      doc.phone ||
+      (doc.finderBusinessId as any)?.phone ||
+      doc.whatsapp ||
+      (doc.finderBusinessId as any)?.whatsapp ||
+      undefined,
+    linkedin: doc.linkedin || (doc.finderBusinessId as any)?.linkedin || undefined,
+    instagram: doc.instagram || (doc.finderBusinessId as any)?.instagram || undefined,
+    facebook: doc.facebook || (doc.finderBusinessId as any)?.facebook || undefined,
+    twitter: doc.twitter || (doc.finderBusinessId as any)?.twitter || undefined,
     status: fromDbLeadStatus(doc.leadStatus),
     lastContact: lastContactStr,
     dateAdded: dateAddedStr,
@@ -179,8 +189,18 @@ export function transformLeadFinderBusiness(
     openClosed: doc.openClosed ?? null,
     openingHours: doc.openingHours ?? null,
     businessCategory: doc.businessCategory ?? null,
-    phone: doc.phone ?? null,
-    email: doc.email ?? null,
+    phone: doc.phone ?? (doc.leadId as any)?.phone ?? null,
+    email: doc.email ?? (doc.leadId as any)?.email ?? null,
+    whatsapp:
+      doc.whatsapp ??
+      (doc.leadId as any)?.whatsapp ??
+      doc.phone ??
+      (doc.leadId as any)?.phone ??
+      null,
+    facebook: doc.facebook ?? (doc.leadId as any)?.facebook ?? null,
+    instagram: doc.instagram ?? (doc.leadId as any)?.instagram ?? null,
+    linkedin: doc.linkedin ?? (doc.leadId as any)?.linkedin ?? null,
+    twitter: doc.twitter ?? (doc.leadId as any)?.twitter ?? null,
     website: doc.website ?? null,
     fullAddress: doc.fullAddress ?? null,
     googleMapsUrl: doc.googleMapsUrl ?? null,

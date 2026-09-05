@@ -36,23 +36,55 @@ export async function PATCH(
       if (wantSelect) {
         // Select / Confirm into Leads
         if (!finderDoc.leadId) {
-          const newLead = await Lead.create({
+          const leadWhatsapp = finderDoc.whatsapp || finderDoc.phone || undefined;
+          const leadPhone = finderDoc.phone || finderDoc.whatsapp || undefined;
+
+          // Check if lead already exists for this finder business
+          let linkedLead = await Lead.findOne({
+            $or: [{ finderBusinessId: finderDoc._id }, ...(finderDoc.leadId ? [{ _id: finderDoc.leadId }] : [])],
             userId,
-            businessName: finderDoc.businessName,
-            industry: finderDoc.businessCategory || "Other",
-            location: finderDoc.fullAddress || "Not specified",
-            website: finderDoc.website || undefined,
-            websiteStatus: finderDoc.website ? "OTHER" : "NO_WEBSITE",
-            email: finderDoc.email || undefined,
-            phone: finderDoc.phone || undefined,
-            leadStatus: "NEW",
-            leadScore: 75,
-            notes: `Imported via Google Maps Lead Scraper (${finderDoc.googleMapsUrl || ""})`,
-            finderBusinessId: finderDoc._id,
-            foundAt: finderDoc.foundAt || new Date(),
           });
 
-          finderDoc.leadId = newLead._id as any;
+          if (!linkedLead) {
+            linkedLead = await Lead.create({
+              userId,
+              businessName: finderDoc.businessName,
+              industry: finderDoc.businessCategory || "Other",
+              location: finderDoc.fullAddress || "Not specified",
+              website: finderDoc.website || undefined,
+              websiteStatus: finderDoc.website ? "OTHER" : "NO_WEBSITE",
+              email: finderDoc.email || undefined,
+              phone: leadPhone,
+              whatsapp: leadWhatsapp,
+              facebook: finderDoc.facebook || undefined,
+              instagram: finderDoc.instagram || undefined,
+              linkedin: finderDoc.linkedin || undefined,
+              twitter: finderDoc.twitter || undefined,
+              leadStatus: "NEW",
+              leadScore: 75,
+              notes: `Imported via Google Maps Lead Scraper (${finderDoc.googleMapsUrl || ""})`,
+              finderBusinessId: finderDoc._id,
+              foundAt: finderDoc.foundAt || new Date(),
+            });
+          } else {
+            linkedLead.businessName = finderDoc.businessName;
+            if (finderDoc.businessCategory) linkedLead.industry = finderDoc.businessCategory;
+            if (finderDoc.fullAddress) linkedLead.location = finderDoc.fullAddress;
+            if (finderDoc.email) linkedLead.email = finderDoc.email;
+            if (leadWhatsapp) linkedLead.whatsapp = leadWhatsapp;
+            if (leadPhone) linkedLead.phone = leadPhone;
+            if (finderDoc.facebook) linkedLead.facebook = finderDoc.facebook;
+            if (finderDoc.instagram) linkedLead.instagram = finderDoc.instagram;
+            if (finderDoc.linkedin) linkedLead.linkedin = finderDoc.linkedin;
+            if (finderDoc.twitter) linkedLead.twitter = finderDoc.twitter;
+            if (finderDoc.website) {
+              linkedLead.website = finderDoc.website;
+              linkedLead.websiteStatus = "OTHER";
+            }
+            await linkedLead.save();
+          }
+
+          finderDoc.leadId = linkedLead._id as any;
         }
 
         finderDoc.isConfirmed = true;
@@ -122,6 +154,11 @@ export async function PATCH(
     if (body.businessName !== undefined) updateFields.businessName = body.businessName.trim();
     if (body.phone !== undefined) updateFields.phone = body.phone?.trim() || null;
     if (body.email !== undefined) updateFields.email = body.email?.trim() || null;
+    if (body.whatsapp !== undefined) updateFields.whatsapp = body.whatsapp?.trim() || null;
+    if (body.facebook !== undefined) updateFields.facebook = body.facebook?.trim() || null;
+    if (body.instagram !== undefined) updateFields.instagram = body.instagram?.trim() || null;
+    if (body.linkedin !== undefined) updateFields.linkedin = body.linkedin?.trim() || null;
+    if (body.twitter !== undefined) updateFields.twitter = body.twitter?.trim() || null;
     if (body.website !== undefined) updateFields.website = body.website?.trim() || null;
     if (body.fullAddress !== undefined) updateFields.fullAddress = body.fullAddress?.trim() || null;
     if (body.businessCategory !== undefined) updateFields.businessCategory = body.businessCategory?.trim() || null;
@@ -167,35 +204,52 @@ export async function PATCH(
       }
     }
 
+    // If there is a linked lead, synchronize the updated business fields
+    const linkedLead = await Lead.findOne({
+      $or: [
+        ...(finderDoc.leadId ? [{ _id: finderDoc.leadId }] : []),
+        { finderBusinessId: finderDoc._id },
+      ],
+      userId,
+    });
+
+    if (linkedLead) {
+      const leadUpdates: any = {};
+      if (updateFields.businessName) leadUpdates.businessName = updateFields.businessName;
+      if (updateFields.businessCategory) leadUpdates.industry = updateFields.businessCategory;
+      if (updateFields.fullAddress) leadUpdates.location = updateFields.fullAddress;
+      if (updateFields.phone !== undefined) leadUpdates.phone = updateFields.phone || undefined;
+      if (updateFields.email !== undefined) leadUpdates.email = updateFields.email || undefined;
+      if (updateFields.whatsapp !== undefined) leadUpdates.whatsapp = updateFields.whatsapp || undefined;
+      if (updateFields.facebook !== undefined) leadUpdates.facebook = updateFields.facebook || undefined;
+      if (updateFields.instagram !== undefined) leadUpdates.instagram = updateFields.instagram || undefined;
+      if (updateFields.linkedin !== undefined) leadUpdates.linkedin = updateFields.linkedin || undefined;
+      if (updateFields.twitter !== undefined) leadUpdates.twitter = updateFields.twitter || undefined;
+      if (updateFields.website !== undefined) {
+        leadUpdates.website = updateFields.website || undefined;
+        leadUpdates.websiteStatus = updateFields.website ? "OTHER" : "NO_WEBSITE";
+      }
+
+      if (Object.keys(leadUpdates).length > 0) {
+        await Lead.updateOne(
+          { _id: linkedLead._id, userId },
+          { $set: leadUpdates }
+        );
+      }
+
+      if (!finderDoc.leadId) {
+        updateFields.leadId = linkedLead._id;
+      }
+    }
+
     const updated = await LeadFinderBusiness.findOneAndUpdate(
       { _id: id, userId },
       { $set: updateFields },
       { new: true }
     ).populate({
       path: "leadId",
-      select: "leadStatus",
+      select: "leadStatus email whatsapp facebook instagram linkedin twitter",
     });
-
-    // If there is a linked lead, synchronize the updated business fields
-    if (finderDoc.leadId) {
-      const leadUpdates: any = {};
-      if (updateFields.businessName) leadUpdates.businessName = updateFields.businessName;
-      if (updateFields.businessCategory) leadUpdates.industry = updateFields.businessCategory;
-      if (updateFields.fullAddress) leadUpdates.location = updateFields.fullAddress;
-      if (updateFields.phone !== undefined) leadUpdates.phone = updateFields.phone;
-      if (updateFields.email !== undefined) leadUpdates.email = updateFields.email;
-      if (updateFields.website !== undefined) {
-        leadUpdates.website = updateFields.website;
-        leadUpdates.websiteStatus = updateFields.website ? "OTHER" : "NO_WEBSITE";
-      }
-
-      if (Object.keys(leadUpdates).length > 0) {
-        await Lead.updateOne(
-          { _id: finderDoc.leadId, userId },
-          { $set: leadUpdates }
-        );
-      }
-    }
 
     const connectedStatus = (updated?.leadId as any)?.leadStatus || null;
 

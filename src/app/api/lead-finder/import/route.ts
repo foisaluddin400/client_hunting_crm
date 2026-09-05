@@ -18,6 +18,11 @@ interface ScrapedBusinessInput {
   businessCategory?: string | null;
   phone?: string | null;
   email?: string | null;
+  whatsapp?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
+  linkedin?: string | null;
+  twitter?: string | null;
   website?: string | null;
   address?: string | null;
   fullAddress?: string | null;
@@ -162,6 +167,11 @@ export async function POST(req: NextRequest) {
         businessCategory: (item.businessCategory || item.category || "").trim() || null,
         phone: candidate.phone,
         email: item.email?.trim() || null,
+        whatsapp: item.whatsapp?.trim() || null,
+        facebook: item.facebook?.trim() || null,
+        instagram: item.instagram?.trim() || null,
+        linkedin: item.linkedin?.trim() || null,
+        twitter: item.twitter?.trim() || null,
         website: candidate.website,
         fullAddress: candidate.fullAddress,
         googleMapsUrl: (item.googleMapsUrl || item.mapsUrl || "").trim() || null,

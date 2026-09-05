@@ -85,8 +85,8 @@ export function AddLeadModal() {
         setStatus(leadToEdit.status || "New");
         setLeadScore(leadToEdit.leadScore || 80);
         setEmail(leadToEdit.email || "");
-        setWhatsapp(leadToEdit.whatsapp || "");
-        setPhone(leadToEdit.phone || "");
+        setWhatsapp(leadToEdit.whatsapp || leadToEdit.phone || "");
+        setPhone(leadToEdit.phone || leadToEdit.whatsapp || "");
         setLinkedin(leadToEdit.linkedin || "");
         setInstagram(leadToEdit.instagram || "");
         setFacebook(leadToEdit.facebook || "");
@@ -119,8 +119,8 @@ export function AddLeadModal() {
       setStatus(initialData?.status || "New");
       setLeadScore(initialData?.leadScore || 80);
       setEmail(initialData?.email || "");
-      setWhatsapp(initialData?.whatsapp || "");
-      setPhone(initialData?.phone || "");
+      setWhatsapp(initialData?.whatsapp || initialData?.phone || "");
+      setPhone(initialData?.phone || initialData?.whatsapp || "");
       setLinkedin(initialData?.linkedin || "");
       setInstagram(initialData?.instagram || "");
       setFacebook(initialData?.facebook || "");
@@ -168,7 +168,7 @@ export function AddLeadModal() {
       leadScore: Number(leadScore) || 75,
       email: email.trim() || undefined,
       whatsapp: whatsapp.trim() || undefined,
-      phone: phone.trim() || undefined,
+      phone: phone.trim() || whatsapp.trim() || undefined,
       linkedin: linkedin.trim() || undefined,
       instagram: instagram.trim() || undefined,
       facebook: facebook.trim() || undefined,

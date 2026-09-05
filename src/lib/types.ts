@@ -73,6 +73,11 @@ export interface LeadFinderBusinessItem {
   businessCategory?: string | null;
   phone?: string | null;
   email?: string | null;
+  whatsapp?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
+  linkedin?: string | null;
+  twitter?: string | null;
   website?: string | null;
   fullAddress?: string | null;
   googleMapsUrl?: string | null;

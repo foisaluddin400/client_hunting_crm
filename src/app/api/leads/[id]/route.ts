@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
-import { Lead, OutreachActivity, FollowUp } from "@/lib/models";
+import { Lead, OutreachActivity, FollowUp, LeadFinderBusiness } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { leadUpdateSchema } from "@/lib/validations/schemas";
 import {
@@ -107,6 +107,31 @@ export async function PATCH(
 
     if (!updatedLead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Synchronize updates back to linked LeadFinderBusiness if exists
+    const finderUpdates: any = {};
+    if (updateFields.businessName) finderUpdates.businessName = updateFields.businessName;
+    if (updateFields.industry) finderUpdates.businessCategory = updateFields.industry;
+    if (updateFields.location) finderUpdates.fullAddress = updateFields.location;
+    if (updateFields.phone !== undefined) finderUpdates.phone = updateFields.phone;
+    if (updateFields.email !== undefined) finderUpdates.email = updateFields.email;
+    if (updateFields.whatsapp !== undefined) finderUpdates.whatsapp = updateFields.whatsapp;
+    if (updateFields.facebook !== undefined) finderUpdates.facebook = updateFields.facebook;
+    if (updateFields.instagram !== undefined) finderUpdates.instagram = updateFields.instagram;
+    if (updateFields.linkedin !== undefined) finderUpdates.linkedin = updateFields.linkedin;
+    if (updateFields.twitter !== undefined) finderUpdates.twitter = updateFields.twitter;
+    if (updateFields.website !== undefined) finderUpdates.website = updateFields.website;
+
+    if (Object.keys(finderUpdates).length > 0) {
+      const finderQueryOr: any[] = [{ leadId: updatedLead._id }];
+      if (updatedLead.finderBusinessId) {
+        finderQueryOr.push({ _id: updatedLead.finderBusinessId });
+      }
+      await LeadFinderBusiness.updateOne(
+        { $or: finderQueryOr, userId: authUser.userId },
+        { $set: { ...finderUpdates, leadId: updatedLead._id, isConfirmed: true } }
+      ).catch((e) => console.error("Lead to Finder sync error:", e));
     }
 
     const activities = await OutreachActivity.find({
