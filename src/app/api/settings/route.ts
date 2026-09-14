@@ -4,6 +4,7 @@ import { User, UserSettings } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { settingsUpdateSchema } from "@/lib/validations/schemas";
 import { encryptText } from "@/lib/encryption";
+import { DEFAULT_WEBSITE_AUDIT_PROMPT } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   try {
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
         isVerified: settings?.isVerified ?? false,
         lastTested: settings?.lastTested,
       },
+      websiteAuditPrompt: settings?.websiteAuditPrompt || DEFAULT_WEBSITE_AUDIT_PROMPT,
     });
   } catch (err: any) {
     console.error("GET /api/settings error:", err);
@@ -96,6 +98,7 @@ export async function PATCH(req: NextRequest) {
     if (data.fromName !== undefined) smtpUpdates.fromName = data.fromName.trim();
     if (data.fromEmail !== undefined) smtpUpdates.fromEmail = data.fromEmail.trim();
     if (data.secure !== undefined) smtpUpdates.secure = data.secure;
+    if (data.websiteAuditPrompt !== undefined) smtpUpdates.websiteAuditPrompt = data.websiteAuditPrompt.trim();
 
     // If a new SMTP password is provided, securely encrypt it
     if (data.smtpPassword && data.smtpPassword.trim()) {
@@ -140,6 +143,7 @@ export async function PATCH(req: NextRequest) {
         isVerified: updatedSettings?.isVerified ?? false,
         lastTested: updatedSettings?.lastTested,
       },
+      websiteAuditPrompt: updatedSettings?.websiteAuditPrompt || DEFAULT_WEBSITE_AUDIT_PROMPT,
     });
   } catch (err: any) {
     console.error("PATCH /api/settings error:", err);

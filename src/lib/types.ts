@@ -58,10 +58,64 @@ export interface Lead {
   dateAdded: string;
   foundAt?: string;
   finderBusinessId?: string;
+  googleMapsUrl?: string;
+  auditStatus?: "NOT_AUDITED" | "AUDITING" | "COMPLETED" | "FAILED";
+  auditScore?: number;
+  lastAuditedAt?: string;
   notes?: string;
   activities: ActivityItem[];
   avatarColor?: string;
 }
+
+export type AuditCheckStatus = "Passed" | "Needs improvement" | "Failed" | "N/A";
+
+export interface AuditCheckItem {
+  id: string;
+  label: string;
+  status: AuditCheckStatus;
+  value?: string;
+  message: string;
+  whyItMatters: string;
+}
+
+export interface AuditProblemItem {
+  id: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  description: string;
+}
+
+export interface WebsiteAuditItem {
+  id?: string;
+  leadId: string;
+  url: string;
+  status: "AUDITING" | "COMPLETED" | "FAILED";
+  overallScore: number;
+  scores: {
+    pageSpeed: number;
+    lighthouse: number;
+    mobile: number;
+    uxTechnicalDesign: number;
+  };
+  checks: AuditCheckItem[];
+  problems: AuditProblemItem[];
+  recommendedImprovements: string[];
+  recommendedFeatures: string[];
+  businessRecommendations: string[];
+  clientSummary: string;
+  errorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_WEBSITE_AUDIT_PROMPT = `Please perform a comprehensive, professional website, technical SEO, and conversion audit for {{businessName}} ({{category}} in {{location}}).
+Website URL: {{website}}
+
+Analyze:
+1. Technical Health & Accessibility (SSL, meta tags, page speed indicators, mobile responsiveness).
+2. User Experience (UX), layout, visual hierarchy, and CTA effectiveness.
+3. Core missing features and conversion bottlenecks compared to top competitors in {{category}}.
+4. High-impact recommendations and a client-ready pitch summary tailored for {{businessName}}.`;
 
 export interface LeadFinderBusinessItem {
   id: string;

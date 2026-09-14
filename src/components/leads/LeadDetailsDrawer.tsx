@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCRM } from "@/lib/context/crm-context";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,8 @@ import {
   WebsiteStatusBadge,
   ChannelIcon,
 } from "@/components/ui/Badge";
-import { LeadStatus, Channel, ActivityItem } from "@/lib/types";
+import { LeadStatus, Channel, ActivityItem, WebsiteAuditItem } from "@/lib/types";
+import { AuditDetailsModal } from "./AuditDetailsModal";
 import {
   TwitterXIcon,
   LinkedinIcon,
@@ -36,7 +37,16 @@ import {
   Sparkles,
   ChevronDown,
   CheckCircle2,
+  AlertTriangle,
+  XCircle,
   FileText,
+  Bot,
+  Loader2,
+  Gauge,
+  Zap,
+  Smartphone,
+  Layout,
+  ShieldCheck,
 } from "lucide-react";
 import { copyToClipboard } from "@/lib/utils";
 import { useToast } from "@/lib/context/toast-context";
@@ -54,6 +64,8 @@ export function LeadDetailsDrawer() {
     openAddLead,
     openDeleteConfirm,
     followUps,
+    runChatGptAudit,
+    runAutomaticAudit,
   } = useCRM();
   const { showToast } = useToast();
 
@@ -71,6 +83,27 @@ export function LeadDetailsDrawer() {
   const [customActivityChannel, setCustomActivityChannel] = useState<Channel | "call" | "note">("call");
   const [customActivityMessage, setCustomActivityMessage] = useState("");
 
+  // Website Audit state
+  const [audit, setAudit] = useState<WebsiteAuditItem | null>(null);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (lead?.id && lead.website) {
+      setIsLoadingAudit(true);
+      fetch(`/api/audit?leadId=${lead.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.audit) setAudit(data.audit);
+          else setAudit(null);
+        })
+        .catch((err) => console.error("Failed to load audit:", err))
+        .finally(() => setIsLoadingAudit(false));
+    } else {
+      setAudit(null);
+    }
+  }, [lead?.id, lead?.website]);
+
   if (!isOpen || !lead) return null;
 
   const leadFollowUps = followUps.filter((f) => f.leadId === lead.id);
@@ -78,6 +111,21 @@ export function LeadDetailsDrawer() {
   const handleNotesSave = () => {
     updateLead(lead.id, { notes: editableNotes });
     setIsEditingNotes(false);
+  };
+
+  const handleRunAudit = async () => {
+    if (!lead) return;
+    setIsLoadingAudit(true);
+    const res = await runAutomaticAudit(lead.id, !!audit);
+    if (res) {
+      setAudit(res);
+    }
+    setIsLoadingAudit(false);
+  };
+
+  const handleRunChatGpt = () => {
+    if (!lead) return;
+    runChatGptAudit(lead);
   };
 
   const handleLogCustomActivity = (e: React.FormEvent) => {
@@ -134,10 +182,25 @@ export function LeadDetailsDrawer() {
         </div>
       }
       subtitle={
-        <span className="flex items-center gap-1.5 text-xs text-slate-500">
-          <MapPin className="w-3.5 h-3.5" />
-          {lead.location} • {lead.niche}
-        </span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span className="flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-slate-400" />
+            <span>{lead.location}</span>
+          </span>
+          {lead.googleMapsUrl && (
+            <a
+              href={lead.googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 hover:underline inline-flex items-center gap-1 font-semibold"
+            >
+              <span>View on Maps</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          )}
+          <span>•</span>
+          <span>{lead.niche}</span>
+        </div>
       }
       headerActions={
         <div className="flex items-center gap-1.5 mr-2">
@@ -214,10 +277,23 @@ export function LeadDetailsDrawer() {
 
           <div className="space-y-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Website Audit
+              Website Health
             </span>
-            <div>
+            <div className="flex items-center gap-1.5">
               <WebsiteStatusBadge status={lead.websiteStatus} />
+              {lead.auditScore !== undefined && (
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                    lead.auditScore >= 80
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : lead.auditScore >= 50
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-rose-50 text-rose-700 border-rose-200"
+                  }`}
+                >
+                  {lead.auditScore}/100
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -450,7 +526,239 @@ export function LeadDetailsDrawer() {
                     </a>
                   )}
                 </div>
+
+                {/* Location & Google Maps Card */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between sm:col-span-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-slate-400 font-medium">Business Location</p>
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        {lead.location}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {lead.googleMapsUrl && (
+                      <a
+                        href={lead.googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-indigo-600 hover:underline font-semibold inline-flex items-center gap-1"
+                      >
+                        <span>View on Maps</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    <button
+                      onClick={() => handleCopyField(lead.location, "Location")}
+                      className="text-xs text-slate-500 hover:text-slate-800 hover:underline"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
               </div>
+            </div>
+
+            {/* Website Audit & Health Card */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900">Website Audit & Performance</h4>
+                      {audit && (
+                        <span
+                          className={`text-xs font-bold px-2 py-0.5 rounded-md border ${
+                            audit.overallScore >= 80
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : audit.overallScore >= 50
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-rose-50 text-rose-700 border-rose-200"
+                          }`}
+                        >
+                          {audit.overallScore}/100 Overall Score
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Technical SEO, speed, accessibility & conversion health
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRunChatGpt}
+                    leftIcon={<Bot className="w-3.5 h-3.5 text-indigo-600" />}
+                    className="hover:border-indigo-300 hover:bg-indigo-50/50"
+                  >
+                    ChatGPT Audit
+                  </Button>
+
+                  {lead.website ? (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleRunAudit}
+                      disabled={isLoadingAudit}
+                      leftIcon={
+                        isLoadingAudit ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5" />
+                        )
+                      }
+                    >
+                      {isLoadingAudit
+                        ? "Auditing..."
+                        : audit
+                        ? "Re-audit"
+                        : "Run Auto Audit"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
+              {!lead.website ? (
+                <div className="p-4 rounded-xl bg-slate-50 text-center space-y-1">
+                  <p className="text-xs font-semibold text-slate-700">No Website on File</p>
+                  <p className="text-[11px] text-slate-500">
+                    Add a website URL in the lead profile to unlock automatic audits and ChatGPT evaluations.
+                  </p>
+                </div>
+              ) : isLoadingAudit && !audit ? (
+                <div className="p-8 text-center space-y-3 bg-slate-50/70 rounded-xl">
+                  <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-800">
+                    Running 18-Point Technical Website Audit...
+                  </p>
+                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                    Testing SSL, HTTPS redirects, meta tags, H1 hierarchy, sample page links, speed, and mobile responsiveness.
+                  </p>
+                </div>
+              ) : audit ? (
+                <div className="space-y-4">
+                  {/* Score breakdown metrics */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-center space-y-0.5">
+                      <div className="flex items-center justify-center gap-1 text-slate-400">
+                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-[10px] uppercase font-bold tracking-wider">Page Speed</span>
+                      </div>
+                      <p className="text-sm font-extrabold text-slate-900">{audit.scores.pageSpeed}/100</p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-center space-y-0.5">
+                      <div className="flex items-center justify-center gap-1 text-slate-400">
+                        <Gauge className="w-3.5 h-3.5 text-indigo-500" />
+                        <span className="text-[10px] uppercase font-bold tracking-wider">Lighthouse</span>
+                      </div>
+                      <p className="text-sm font-extrabold text-slate-900">{audit.scores.lighthouse}/100</p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-center space-y-0.5">
+                      <div className="flex items-center justify-center gap-1 text-slate-400">
+                        <Smartphone className="w-3.5 h-3.5 text-emerald-500" />
+                        <span className="text-[10px] uppercase font-bold tracking-wider">Mobile</span>
+                      </div>
+                      <p className="text-sm font-extrabold text-slate-900">{audit.scores.mobile}/100</p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-center space-y-0.5">
+                      <div className="flex items-center justify-center gap-1 text-slate-400">
+                        <Layout className="w-3.5 h-3.5 text-purple-500" />
+                        <span className="text-[10px] uppercase font-bold tracking-wider">UX / Design</span>
+                      </div>
+                      <p className="text-sm font-extrabold text-slate-900">{audit.scores.uxTechnicalDesign}/100</p>
+                    </div>
+                  </div>
+
+                  {/* Mini-Checklist */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        Key Health Checks ({audit.checks.filter(c => c.status === "Passed").length}/{audit.checks.length} Passed)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAuditModalOpen(true)}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                      >
+                        <span>See Details & Fixes</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {audit.checks.slice(0, 8).map((chk) => (
+                        <div
+                          key={chk.id}
+                          className="flex items-center justify-between p-2 rounded-lg bg-slate-50/70 border border-slate-200/60"
+                        >
+                          <span className="font-medium text-slate-700 truncate pr-2">{chk.label}</span>
+                          <span className="shrink-0">
+                            {chk.status === "Passed" ? (
+                              <span className="text-emerald-600 font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span className="text-[10px]">Pass</span>
+                              </span>
+                            ) : chk.status === "Needs improvement" ? (
+                              <span className="text-amber-600 font-bold flex items-center gap-1">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                <span className="text-[10px]">Warning</span>
+                              </span>
+                            ) : chk.status === "Failed" ? (
+                              <span className="text-rose-600 font-bold flex items-center gap-1">
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span className="text-[10px]">Fail</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[10px]">N/A</span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Footer button */}
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAuditModalOpen(true)}
+                      leftIcon={<FileText className="w-3.5 h-3.5 text-indigo-600" />}
+                    >
+                      View Full Audit Report ({audit.problems.length} issues found)
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center space-y-2">
+                  <p className="text-xs text-slate-600">
+                    This lead has a website (<strong className="text-slate-900">{lead.website}</strong>) but has not been audited yet.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleRunAudit}
+                    leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+                  >
+                    Run 18-Point Technical Audit Now
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Social Profiles Grid */}
@@ -778,6 +1086,20 @@ export function LeadDetailsDrawer() {
           </div>
         </div>
       )}
+
+      {/* Website Audit Details Modal */}
+      <AuditDetailsModal
+        isOpen={auditModalOpen}
+        onClose={() => setAuditModalOpen(false)}
+        audit={audit}
+        businessName={lead.businessName}
+        website={lead.website}
+        category={lead.niche}
+        location={lead.location}
+        onReAudit={handleRunAudit}
+        onRunChatGpt={handleRunChatGpt}
+        isAuditing={isLoadingAudit}
+      />
     </Drawer>
   );
 }

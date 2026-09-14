@@ -13,6 +13,7 @@ export interface IUserSettings extends Document {
   lastTested?: Date;
   businessCategories?: string[];
   targetCountries?: string[];
+  websiteAuditPrompt?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +70,10 @@ const UserSettingsSchema = new Schema<IUserSettings>(
     targetCountries: {
       type: [String],
       default: undefined,
+    },
+    websiteAuditPrompt: {
+      type: String,
+      trim: true,
     },
   },
   {

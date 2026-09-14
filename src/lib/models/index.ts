@@ -7,3 +7,4 @@ export * from "./UserSettings";
 export * from "./Note";
 export * from "./LeadFinderBusiness";
 export * from "./GoogleMapsSearch";
+export * from "./WebsiteAudit";

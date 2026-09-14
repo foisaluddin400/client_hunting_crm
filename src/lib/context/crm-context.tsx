@@ -17,6 +17,8 @@ import {
   Channel,
   LeadStatus,
   ActivityItem,
+  WebsiteAuditItem,
+  DEFAULT_WEBSITE_AUDIT_PROMPT,
 } from "../types";
 import { INITIAL_LEADS } from "../mock-data/leads";
 import { INITIAL_FOLLOW_UPS } from "../mock-data/follow-ups";
@@ -31,6 +33,7 @@ import {
   COUNTRIES_STORAGE_KEY,
 } from "@/constants/countries";
 import { useToast } from "./toast-context";
+import { copyToClipboard } from "@/lib/utils";
 
 interface ActiveOutreachState {
   isOpen: boolean;
@@ -138,6 +141,10 @@ interface CRMContextType {
   // Templates & Config Actions
   saveTemplate: (template: Partial<MessageTemplate> & { name: string; body: string }) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
+  websiteAuditPrompt: string;
+  saveWebsiteAuditPrompt: (prompt: string) => Promise<void>;
+  runChatGptAudit: (lead: Lead) => Promise<void>;
+  runAutomaticAudit: (leadId: string, refresh?: boolean) => Promise<WebsiteAuditItem | null>;
   updateSmtpConfig: (config: Partial<SmtpConfig>) => Promise<void>;
   testSmtpConnection: (config?: Partial<SmtpConfig>) => Promise<boolean>;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
@@ -172,6 +179,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [followUps, setFollowUps] = useState<FollowUpItem[]>(INITIAL_FOLLOW_UPS);
   const [templates, setTemplates] = useState<MessageTemplate[]>(DEFAULT_TEMPLATES);
+  const [websiteAuditPrompt, setWebsiteAuditPrompt] = useState<string>(DEFAULT_WEBSITE_AUDIT_PROMPT);
   const [mapBusinesses, setMapBusinesses] = useState<MapBusiness[]>(MOCK_MAP_BUSINESSES);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
@@ -269,6 +277,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           setIsAuthenticated(true);
         }
         if (meData.settings) {
+          if (meData.settings.websiteAuditPrompt) {
+            setWebsiteAuditPrompt(meData.settings.websiteAuditPrompt);
+          }
           setSmtpConfig((prev) => ({
             ...prev,
             host: meData.settings.smtpHost || prev.host,
@@ -998,6 +1009,127 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Website Audit Prompt Actions
+  const saveWebsiteAuditPrompt = async (prompt: string) => {
+    try {
+      setWebsiteAuditPrompt(prompt);
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ websiteAuditPrompt: prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save website audit prompt.");
+      }
+      showToast({
+        type: "success",
+        title: "Prompt Saved",
+        message: "Website audit prompt template updated.",
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Failed to Save Prompt",
+        message: err.message,
+      });
+    }
+  };
+
+  // Run ChatGPT Audit
+  const runChatGptAudit = async (lead: Lead) => {
+    try {
+      const template = websiteAuditPrompt || DEFAULT_WEBSITE_AUDIT_PROMPT;
+      let prompt = template
+        .replace(/\{\{businessName\}\}/g, lead.businessName || "the business")
+        .replace(/\{\{website\}\}/g, lead.website || "")
+        .replace(/\{\{category\}\}/g, (lead as any).category || lead.niche || "General Business")
+        .replace(/\{\{location\}\}/g, lead.location || "Local area");
+
+      if (lead.website && !prompt.includes(lead.website)) {
+        prompt += `\n\nWebsite URL: ${lead.website}`;
+      }
+
+      await copyToClipboard(prompt);
+
+      const encodedPrompt = encodeURIComponent(prompt);
+      const chatGptUrl = `https://chatgpt.com/?q=${encodedPrompt}`;
+      window.open(chatGptUrl, "_blank", "noopener,noreferrer");
+
+      showToast({
+        type: "success",
+        title: "Opening ChatGPT Audit",
+        message: "Prompt copied to clipboard and opened in ChatGPT.",
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Audit Action Failed",
+        message: err.message || "Failed to prepare ChatGPT audit.",
+      });
+    }
+  };
+
+  // Run Automatic Website Audit
+  const runAutomaticAudit = async (
+    leadId: string,
+    refresh = false
+  ): Promise<WebsiteAuditItem | null> => {
+    try {
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadId ? { ...l, auditStatus: "AUDITING" as const } : l
+        )
+      );
+
+      const res = await fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, refresh }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to run website audit.");
+      }
+
+      const audit: WebsiteAuditItem = data.audit;
+
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadId
+            ? {
+                ...l,
+                auditStatus: audit.status,
+                auditScore: audit.overallScore,
+                lastAuditedAt: audit.updatedAt || new Date().toISOString(),
+              }
+            : l
+        )
+      );
+
+      showToast({
+        type: "success",
+        title: "Audit Completed",
+        message: `Website audit finished. Overall score: ${audit.overallScore}/100`,
+      });
+
+      return audit;
+    } catch (err: any) {
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadId ? { ...l, auditStatus: "FAILED" as const } : l
+        )
+      );
+      showToast({
+        type: "error",
+        title: "Audit Failed",
+        message: err.message || "Failed to complete website audit.",
+      });
+      return null;
+    }
+  };
+
   // Update SMTP Settings
   const updateSmtpConfig = async (config: Partial<SmtpConfig>) => {
     try {
@@ -1286,6 +1418,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         resetCategories,
         saveTemplate,
         deleteTemplate,
+        websiteAuditPrompt,
+        saveWebsiteAuditPrompt,
+        runChatGptAudit,
+        runAutomaticAudit,
         updateSmtpConfig,
         testSmtpConnection,
         updateUserProfile,

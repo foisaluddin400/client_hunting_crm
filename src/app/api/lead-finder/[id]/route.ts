@@ -62,7 +62,7 @@ export async function PATCH(
               twitter: finderDoc.twitter || undefined,
               leadStatus: "NEW",
               leadScore: 75,
-              notes: `Imported via Google Maps Lead Scraper (${finderDoc.googleMapsUrl || ""})`,
+              googleMapsUrl: finderDoc.googleMapsUrl || undefined,
               finderBusinessId: finderDoc._id,
               foundAt: finderDoc.foundAt || new Date(),
             });
@@ -77,6 +77,7 @@ export async function PATCH(
             if (finderDoc.instagram) linkedLead.instagram = finderDoc.instagram;
             if (finderDoc.linkedin) linkedLead.linkedin = finderDoc.linkedin;
             if (finderDoc.twitter) linkedLead.twitter = finderDoc.twitter;
+            if (finderDoc.googleMapsUrl) linkedLead.googleMapsUrl = finderDoc.googleMapsUrl;
             if (finderDoc.website) {
               linkedLead.website = finderDoc.website;
               linkedLead.websiteStatus = "OTHER";

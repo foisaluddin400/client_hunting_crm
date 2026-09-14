@@ -465,7 +465,7 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                 <th className="p-4">Rating & Reviews</th>
                 <th className="p-4">Category</th>
                 <th className="p-4">Contact</th>
-                <th className="p-4">Address</th>
+                <th className="p-4">Location</th>
                 <th className="p-4">Hours / Status</th>
                 <th className="p-4">Found Date & Time</th>
                 <th className="p-4">Leads State</th>
@@ -518,23 +518,12 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                         )}
                       </td>
 
-                      {/* Business Name & Google Maps Place link */}
+                      {/* Business Name */}
                       <td className="p-4">
                         <div className="space-y-0.5 min-w-0 max-w-[180px]">
                           <span className="font-bold text-slate-900 block truncate text-sm">
                             {business.businessName}
                           </span>
-                          {business.googleMapsUrl && (
-                            <a
-                              href={business.googleMapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[11px] text-indigo-600 hover:underline inline-flex items-center gap-1 font-medium"
-                            >
-                              <span>View on Maps</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          )}
                         </div>
                       </td>
 
@@ -615,13 +604,26 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                         </div>
                       </td>
 
-                      {/* Full Address */}
+                      {/* Location & Google Maps Place link */}
                       <td className="p-4 text-slate-600">
-                        <div className="flex items-start gap-1 max-w-[170px] text-xs">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <span className="line-clamp-2 leading-relaxed text-[11px]">
-                            {business.fullAddress || "Address not provided"}
-                          </span>
+                        <div className="space-y-1 max-w-[180px] text-xs">
+                          <div className="flex items-start gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                            <span className="line-clamp-2 leading-relaxed text-[11px]">
+                              {business.fullAddress || "Address not provided"}
+                            </span>
+                          </div>
+                          {business.googleMapsUrl && (
+                            <a
+                              href={business.googleMapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-indigo-600 hover:underline inline-flex items-center gap-1 font-medium pl-4"
+                            >
+                              <span>View on Maps</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
                         </div>
                       </td>
 

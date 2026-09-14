@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
             twitter: finder.twitter || undefined,
             leadStatus: "NEW",
             leadScore: 75,
-            notes: `Imported via Google Maps Lead Scraper (${finder.googleMapsUrl || ""})`,
+            googleMapsUrl: finder.googleMapsUrl || undefined,
             finderBusinessId: finder._id,
             foundAt: finder.foundAt || new Date(),
           });
@@ -171,6 +171,7 @@ export async function POST(req: NextRequest) {
           if (finder.instagram) targetLead.instagram = finder.instagram;
           if (finder.linkedin) targetLead.linkedin = finder.linkedin;
           if (finder.twitter) targetLead.twitter = finder.twitter;
+          if (finder.googleMapsUrl) targetLead.googleMapsUrl = finder.googleMapsUrl;
           if (finder.website) {
             targetLead.website = finder.website;
             targetLead.websiteStatus = "OTHER";

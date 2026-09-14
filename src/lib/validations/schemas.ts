@@ -155,4 +155,5 @@ export const settingsUpdateSchema = z.object({
   fromName: z.string().optional(),
   fromEmail: z.string().email().optional().or(z.literal("")),
   secure: z.boolean().optional(),
+  websiteAuditPrompt: z.string().optional(),
 });

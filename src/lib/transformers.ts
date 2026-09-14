@@ -129,6 +129,28 @@ export function transformLead(
     ? new Date(doc.createdAt).toISOString()
     : undefined;
 
+  // Extract googleMapsUrl and ensure notes is clean of scraper URL
+  let extractedMapsUrl =
+    doc.googleMapsUrl ||
+    (doc.finderBusinessId as any)?.googleMapsUrl ||
+    undefined;
+
+  let cleanNotes = doc.notes || undefined;
+  if (cleanNotes && cleanNotes.includes("Imported via Google Maps Lead Scraper")) {
+    const match = cleanNotes.match(/\((https?:\/\/[^\s\)]+)\)/);
+    if (match && match[1] && !extractedMapsUrl) {
+      extractedMapsUrl = match[1];
+    }
+    cleanNotes = cleanNotes
+      .replace(/Imported via Google Maps Lead Scraper\s*\([^\)]*\)/gi, "")
+      .trim();
+    if (!cleanNotes) cleanNotes = undefined;
+  }
+
+  const lastAuditedStr = doc.lastAuditedAt
+    ? new Date(doc.lastAuditedAt).toISOString()
+    : undefined;
+
   return {
     id: doc._id ? doc._id.toString() : doc.id,
     businessName: doc.businessName,
@@ -160,7 +182,11 @@ export function transformLead(
     dateAdded: dateAddedStr,
     foundAt: foundAtStr,
     finderBusinessId: doc.finderBusinessId ? doc.finderBusinessId.toString() : undefined,
-    notes: doc.notes || undefined,
+    googleMapsUrl: extractedMapsUrl,
+    auditStatus: doc.auditStatus || "NOT_AUDITED",
+    auditScore: doc.auditScore ?? undefined,
+    lastAuditedAt: lastAuditedStr,
+    notes: cleanNotes,
     avatarColor: doc.avatarColor || "bg-indigo-600",
     activities: activities.map((a) => transformActivity(a)),
   };

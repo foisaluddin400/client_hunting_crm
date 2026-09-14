@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lead, Channel, LeadStatus } from "@/lib/types";
+import { Lead, Channel, LeadStatus, WebsiteAuditItem } from "@/lib/types";
 import { useCRM } from "@/lib/context/crm-context";
 import { LeadStatusBadge, WebsiteStatusBadge } from "@/components/ui/Badge";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -9,6 +9,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { exportLeadsToCSV } from "@/lib/utils";
+import { AuditDetailsModal } from "./AuditDetailsModal";
 import {
   TwitterXIcon,
   LinkedinIcon,
@@ -29,6 +30,8 @@ import {
   CheckSquare,
   Square,
   ChevronDown,
+  Bot,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
@@ -51,6 +54,13 @@ function formatLeadDateTime(dateStr?: string) {
   }).format(date);
 }
 
+function getScoreBadgeStyle(score?: number) {
+  if (score === undefined || score === null) return "bg-slate-100 text-slate-700 border-slate-200";
+  if (score >= 80) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (score >= 50) return "bg-amber-50 text-amber-700 border-amber-200";
+  return "bg-rose-50 text-rose-700 border-rose-200";
+}
+
 export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
   const {
     openLeadDetails,
@@ -59,11 +69,59 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
     openDeleteConfirm,
     updateLeadStatus,
     deleteLead,
+    runChatGptAudit,
+    runAutomaticAudit,
   } = useCRM();
 
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
+
+  // Website Audit Details Modal state
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [selectedAuditLead, setSelectedAuditLead] = useState<Lead | null>(null);
+  const [currentAudit, setCurrentAudit] = useState<WebsiteAuditItem | null>(null);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+
+  const handleOpenAuditModal = async (lead: Lead) => {
+    setSelectedAuditLead(lead);
+    setAuditModalOpen(true);
+    setIsLoadingAudit(true);
+    try {
+      const res = await fetch(`/api/audit?leadId=${lead.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.audit) {
+          setCurrentAudit(data.audit);
+        } else {
+          setCurrentAudit(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch lead audit details:", err);
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  };
+
+  const handleReAuditModal = async () => {
+    if (!selectedAuditLead) return;
+    setIsLoadingAudit(true);
+    const audit = await runAutomaticAudit(selectedAuditLead.id, true);
+    if (audit) {
+      setCurrentAudit(audit);
+    }
+    setIsLoadingAudit(false);
+  };
+
+  const handleRunChatGptModal = () => {
+    if (!selectedAuditLead) return;
+    runChatGptAudit(selectedAuditLead);
+  };
+
+  const handleDirectAutoAudit = async (lead: Lead) => {
+    await runAutomaticAudit(lead.id, false);
+  };
 
   // Multi-select helpers
   const isAllSelected =
@@ -161,6 +219,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                 <th className="p-4">Business & Contact</th>
                 <th className="p-4">Location</th>
                 <th className="p-4">Website Status</th>
+                <th className="p-4">Website Audit</th>
                 <th className="p-4 text-center">Outreach Channels</th>
                 <th className="p-4">Lead Status</th>
                 <th className="p-4">Date & Time</th>
@@ -172,7 +231,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
             <tbody className="divide-y divide-slate-100 text-xs">
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRowSkeleton key={i} columns={9} />
+                  <TableRowSkeleton key={i} columns={10} />
                 ))
               ) : paginatedLeads.length > 0 ? (
                 paginatedLeads.map((lead) => {
@@ -228,9 +287,22 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
 
                       {/* Location */}
                       <td className="p-4 text-slate-600">
-                        <div className="flex items-center gap-1.5 truncate max-w-[140px]">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{lead.location}</span>
+                        <div className="space-y-0.5 truncate max-w-[150px]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{lead.location}</span>
+                          </div>
+                          {lead.googleMapsUrl && (
+                            <a
+                              href={lead.googleMapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-indigo-600 hover:underline inline-flex items-center gap-1 font-medium pl-5"
+                            >
+                              <span>View on Maps</span>
+                              <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                            </a>
+                          )}
                         </div>
                       </td>
 
@@ -260,6 +332,87 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                             </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* Website Audit (ChatGPT & Automatic Engine) */}
+                      <td className="p-4">
+                        {lead.website ? (
+                          <div className="space-y-1.5 min-w-[130px]">
+                            <div className="flex items-center gap-1.5">
+                              {lead.auditStatus === "AUDITING" ? (
+                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-semibold animate-pulse">
+                                  <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
+                                  <span>Auditing...</span>
+                                </div>
+                              ) : lead.auditStatus === "COMPLETED" && lead.auditScore !== undefined ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${getScoreBadgeStyle(
+                                      lead.auditScore
+                                    )}`}
+                                  >
+                                    {lead.auditScore}/100
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenAuditModal(lead)}
+                                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold hover:underline inline-flex items-center gap-0.5"
+                                  >
+                                    <span>Details</span>
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+                              ) : lead.auditStatus === "FAILED" ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                                    Failed
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDirectAutoAudit(lead)}
+                                    className="text-[11px] text-indigo-600 hover:underline font-medium"
+                                  >
+                                    Retry
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDirectAutoAudit(lead)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200 transition-colors"
+                                >
+                                  <Sparkles className="w-2.5 h-2.5 text-indigo-600" />
+                                  <span>Auto Audit</span>
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => runChatGptAudit(lead)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 transition-colors shadow-2xs"
+                                title="Prepare prompt and open in ChatGPT"
+                              >
+                                <Bot className="w-3 h-3 text-indigo-600" />
+                                <span>ChatGPT</span>
+                              </button>
+
+                              {lead.auditStatus === "COMPLETED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDirectAutoAudit(lead)}
+                                  className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                                  title="Re-run automatic audit"
+                                >
+                                  Re-run
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-300 font-mono">—</span>
+                        )}
                       </td>
 
                       {/* Contact Channel Action Icons */}
@@ -458,7 +611,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-0">
+                  <td colSpan={10} className="p-0">
                     <EmptyState
                       icon={<Users className="w-6 h-6 text-indigo-600" />}
                       title="No leads match your criteria"
@@ -482,6 +635,25 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
           onPageChange={(page) => setCurrentPage(page)}
         />
       </div>
+
+      {/* Website Audit Details Modal */}
+      {selectedAuditLead && (
+        <AuditDetailsModal
+          isOpen={auditModalOpen}
+          onClose={() => {
+            setAuditModalOpen(false);
+            setSelectedAuditLead(null);
+          }}
+          audit={currentAudit}
+          businessName={selectedAuditLead.businessName}
+          website={selectedAuditLead.website}
+          category={selectedAuditLead.niche}
+          location={selectedAuditLead.location}
+          onReAudit={handleReAuditModal}
+          onRunChatGpt={handleRunChatGptModal}
+          isAuditing={isLoadingAudit}
+        />
+      )}
     </div>
   );
 }

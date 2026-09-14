@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
         lastTested: userSettings?.lastTested,
         businessCategories: userSettings?.businessCategories,
         targetCountries: userSettings?.targetCountries,
+        websiteAuditPrompt: userSettings?.websiteAuditPrompt,
       },
     });
   } catch (err: any) {
