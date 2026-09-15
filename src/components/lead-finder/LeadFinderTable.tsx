@@ -497,7 +497,7 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                       key={business.id}
                       className={`transition-colors ${
                         isLead
-                          ? "bg-emerald-50/35 hover:bg-emerald-50/60 border-l-2 border-emerald-500/60"
+                          ? "bg-emerald-100/60 hover:bg-emerald-100/80 border-l-2 border-emerald-500"
                           : "hover:bg-slate-50/80"
                       }`}
                     >
