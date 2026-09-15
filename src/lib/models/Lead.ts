@@ -42,6 +42,7 @@ export interface ILead extends Document {
   finderBusinessId?: Types.ObjectId;
   foundAt?: Date;
   googleMapsUrl?: string;
+  link?: string;
   auditStatus?: "NOT_AUDITED" | "AUDITING" | "COMPLETED" | "FAILED";
   auditScore?: number;
   lastAuditedAt?: Date;
@@ -165,6 +166,10 @@ const LeadSchema = new Schema<ILead>(
       index: true,
     },
     googleMapsUrl: {
+      type: String,
+      trim: true,
+    },
+    link: {
       type: String,
       trim: true,
     },

@@ -114,3 +114,91 @@ export function isDuplicateBusiness(
   // If secondary identifiers were available to compare but none matched, they are treated as different businesses
   return false;
 }
+
+export function normalizeEmail(email?: string | null): string {
+  if (!email) return "";
+  return email.trim().toLowerCase();
+}
+
+export function normalizeSocialUrl(url?: string | null): string {
+  if (!url) return "";
+  let s = url.trim().toLowerCase();
+  s = s.replace(/^https?:\/\//, "");
+  s = s.replace(/^www\./, "");
+  s = s.replace(/\/+$/, "");
+  return s;
+}
+
+export interface DuplicateContactCounts {
+  emails: Record<string, number>;
+  phones: Record<string, number>;
+  linkedins: Record<string, number>;
+  instagrams: Record<string, number>;
+  facebooks: Record<string, number>;
+  twitters: Record<string, number>;
+}
+
+export function computeContactDuplicateCounts(
+  records: Array<{
+    email?: string | null;
+    phone?: string | null;
+    whatsapp?: string | null;
+    linkedin?: string | null;
+    instagram?: string | null;
+    facebook?: string | null;
+    twitter?: string | null;
+  }>
+): DuplicateContactCounts {
+  const counts: DuplicateContactCounts = {
+    emails: {},
+    phones: {},
+    linkedins: {},
+    instagrams: {},
+    facebooks: {},
+    twitters: {},
+  };
+
+  for (const item of records) {
+    const emailKey = normalizeEmail(item.email);
+    if (emailKey) {
+      counts.emails[emailKey] = (counts.emails[emailKey] || 0) + 1;
+    }
+
+    const phoneKey = normalizePhone(item.phone);
+    const whatsappKey = normalizePhone(item.whatsapp);
+
+    // If both exist and match, only count once for this business
+    if (phoneKey && whatsappKey && phoneKey === whatsappKey) {
+      counts.phones[phoneKey] = (counts.phones[phoneKey] || 0) + 1;
+    } else {
+      if (phoneKey) {
+        counts.phones[phoneKey] = (counts.phones[phoneKey] || 0) + 1;
+      }
+      if (whatsappKey) {
+        counts.phones[whatsappKey] = (counts.phones[whatsappKey] || 0) + 1;
+      }
+    }
+
+    const linkedinKey = normalizeSocialUrl(item.linkedin);
+    if (linkedinKey) {
+      counts.linkedins[linkedinKey] = (counts.linkedins[linkedinKey] || 0) + 1;
+    }
+
+    const instagramKey = normalizeSocialUrl(item.instagram);
+    if (instagramKey) {
+      counts.instagrams[instagramKey] = (counts.instagrams[instagramKey] || 0) + 1;
+    }
+
+    const facebookKey = normalizeSocialUrl(item.facebook);
+    if (facebookKey) {
+      counts.facebooks[facebookKey] = (counts.facebooks[facebookKey] || 0) + 1;
+    }
+
+    const twitterKey = normalizeSocialUrl(item.twitter);
+    if (twitterKey) {
+      counts.twitters[twitterKey] = (counts.twitters[twitterKey] || 0) + 1;
+    }
+  }
+
+  return counts;
+}

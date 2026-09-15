@@ -85,11 +85,12 @@ function LeadsContent() {
       }
 
       // Location
-      if (
-        filters.location &&
-        !lead.location.toLowerCase().includes(filters.location.toLowerCase())
-      ) {
-        return false;
+      if (filters.location && filters.location !== "all") {
+        const selLoc = filters.location.trim().toLowerCase();
+        const leadLoc = (lead.location || "").trim().toLowerCase();
+        if (leadLoc !== selLoc && !leadLoc.includes(selLoc)) {
+          return false;
+        }
       }
 
       // Channel

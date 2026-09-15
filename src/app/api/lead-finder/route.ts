@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
             userId,
             businessName: finder.businessName,
             industry: finder.businessCategory || "Other",
-            location: finder.fullAddress || "Not specified",
+            location: finder.location || finder.fullAddress || "Not specified",
             website: finder.website || undefined,
             websiteStatus: finder.website ? "OTHER" : "NO_WEBSITE",
             email: finder.email || undefined,
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
         } else {
           targetLead.businessName = finder.businessName;
           if (finder.businessCategory) targetLead.industry = finder.businessCategory;
-          if (finder.fullAddress) targetLead.location = finder.fullAddress;
+          if (finder.location || finder.fullAddress) targetLead.location = (finder.location || finder.fullAddress) as string;
           if (finder.email) targetLead.email = finder.email;
           if (leadWhatsapp) targetLead.whatsapp = leadWhatsapp;
           if (leadPhone) targetLead.phone = leadPhone;

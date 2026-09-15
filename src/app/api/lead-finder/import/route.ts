@@ -26,6 +26,7 @@ interface ScrapedBusinessInput {
   website?: string | null;
   address?: string | null;
   fullAddress?: string | null;
+  location?: string | null;
   mapsUrl?: string | null;
   googleMapsUrl?: string | null;
   scrapedAt?: number | string | null;
@@ -174,6 +175,7 @@ export async function POST(req: NextRequest) {
         twitter: item.twitter?.trim() || null,
         website: candidate.website,
         fullAddress: candidate.fullAddress,
+        location: (item.location || "").trim() || null,
         googleMapsUrl: (item.googleMapsUrl || item.mapsUrl || "").trim() || null,
         foundAt: isNaN(foundTimestamp.getTime()) ? new Date() : foundTimestamp,
         isConfirmed: false,

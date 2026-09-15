@@ -8,6 +8,12 @@ import { Pagination } from "@/components/ui/Pagination";
 import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
+  normalizeEmail,
+  normalizePhone,
+  normalizeSocialUrl,
+  DuplicateContactCounts,
+} from "@/lib/duplicate-detector";
+import {
   ExternalLink,
   MapPin,
   Phone,
@@ -63,6 +69,23 @@ export function LeadFinderTable({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
 
+  const [duplicateCounts, setDuplicateCounts] = useState<DuplicateContactCounts | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/contacts/duplicates")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data?.counts) {
+          setDuplicateCounts(data.counts);
+        }
+      })
+      .catch((err) => console.error("Failed to load duplicate counts:", err));
+    return () => {
+      isMounted = false;
+    };
+  }, [businesses]);
+
 // Helper to normalize category strings for robust singular/plural and case-insensitive matching
 function normalizeCategory(str: string): string {
   return str
@@ -115,20 +138,16 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [categories, businesses]);
 
-  // Extract detected unique locations/cities for quick selection
-  const availableLocations = useMemo(() => {
-    const set = new Set<string>();
+  // Extract detected locations with counts for dynamic dropdown (Requirement 13)
+  const availableLocationCounts = useMemo(() => {
+    const map = new Map<string, number>();
     businesses.forEach((b) => {
-      if (b.fullAddress && b.fullAddress.trim()) {
-        const parts = b.fullAddress.split(",").map((p) => p.trim());
-        parts.forEach((p) => {
-          if (p.length > 2 && !/^\d+$/.test(p) && !/^\d{4,}/.test(p)) {
-            set.add(p);
-          }
-        });
+      const loc = (b.location || b.fullAddress || "").trim();
+      if (loc && loc.toLowerCase() !== "not specified") {
+        map.set(loc, (map.get(loc) || 0) + 1);
       }
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b)).slice(0, 50);
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [businesses]);
 
   // Reset pagination when any filter changes
@@ -187,10 +206,10 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
       }
 
       // 4. Location / City Filter
-      if (locationFilter.trim()) {
+      if (locationFilter && locationFilter !== "all") {
         const locQuery = locationFilter.toLowerCase().trim();
-        const addr = (b.fullAddress || "").toLowerCase();
-        if (!addr.includes(locQuery)) return false;
+        const bLoc = (b.location || b.fullAddress || "").toLowerCase().trim();
+        if (bLoc !== locQuery && !bLoc.includes(locQuery)) return false;
       }
 
       // 5. Status Filter
@@ -342,33 +361,21 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
               <option value="no_website">No Website</option>
             </select>
 
-            {/* Location / City Filter */}
-            <div className="relative flex items-center">
-              <MapPin className="absolute left-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                list="lead-finder-locations"
-                value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
-                placeholder="Location / City..."
-                className="w-32 sm:w-40 rounded-lg border border-slate-200 bg-white pl-8 pr-6 py-2 text-xs font-semibold text-slate-700 shadow-2xs placeholder:text-slate-400 placeholder:font-normal focus:border-indigo-500 focus:outline-none"
-              />
-              <datalist id="lead-finder-locations">
-                {availableLocations.map((loc) => (
-                  <option key={loc} value={loc} />
-                ))}
-              </datalist>
-              {locationFilter && (
-                <button
-                  type="button"
-                  onClick={() => setLocationFilter("")}
-                  className="absolute right-2 text-slate-400 hover:text-slate-600 text-xs font-bold leading-none"
-                  title="Clear Location"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
+            {/* Location / City Dynamic Dropdown (Requirement 13) */}
+            <select
+              value={locationFilter || "all"}
+              onChange={(e) =>
+                setLocationFilter(e.target.value === "all" ? "" : e.target.value)
+              }
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="all">Location: All</option>
+              {availableLocationCounts.map(([loc, count]) => (
+                <option key={loc} value={loc}>
+                  {loc} ({count})
+                </option>
+              ))}
+            </select>
 
             {/* Status Filter */}
             <select
@@ -460,6 +467,7 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="p-4 w-12 text-center">SI.N</th>
                 <th className="p-4 w-12 text-center">Move</th>
                 <th className="p-4">Business</th>
                 <th className="p-4">Rating & Reviews</th>
@@ -476,20 +484,28 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
             <tbody className="divide-y divide-slate-100 text-xs">
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <TableRowSkeleton key={i} columns={10} />
+                  <TableRowSkeleton key={i} columns={11} />
                 ))
               ) : paginatedList.length > 0 ? (
-                paginatedList.map((business) => {
+                paginatedList.map((business, index) => {
                   const isChecked = business.isSelected;
                   const isLocked = business.isConnected;
+                  const isLead = Boolean(business.isSelected || business.isConnected || business.leadId);
 
                   return (
                     <tr
                       key={business.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        isChecked ? "bg-indigo-50/30" : ""
+                      className={`transition-colors ${
+                        isLead
+                          ? "bg-emerald-50/35 hover:bg-emerald-50/60 border-l-2 border-emerald-500/60"
+                          : "hover:bg-slate-50/80"
                       }`}
                     >
+                      {/* Serial Number */}
+                      <td className="p-4 text-center font-mono text-slate-500 font-semibold text-xs">
+                        {(currentPage - 1) * pageSize + index + 1}
+                      </td>
+
                       {/* Checkbox (with connected lead protection) */}
                       <td className="p-4 text-center">
                         {isLocked ? (
@@ -560,48 +576,76 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
 
                       {/* Contact Info (Phone / Email / Website) */}
                       <td className="p-4">
-                        <div className="space-y-1 text-xs">
-                          {business.phone ? (
-                            <div className="flex items-center gap-1.5 text-slate-700 font-mono text-[11px]">
-                              <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span>{business.phone}</span>
-                            </div>
-                          ) : null}
+                        {(() => {
+                          const emailKey = normalizeEmail(business.email);
+                          const emailDup = emailKey && duplicateCounts?.emails ? duplicateCounts.emails[emailKey] || 0 : 0;
 
-                          {business.whatsapp ? (
-                            <div className="flex items-center gap-1.5 text-emerald-700 font-mono text-[11px]">
-                              <MessageSquare className="w-3 h-3 text-emerald-500 shrink-0" />
-                              <span>{business.whatsapp}</span>
-                            </div>
-                          ) : null}
+                          const phoneKey = normalizePhone(business.phone);
+                          const phoneDup = phoneKey && duplicateCounts?.phones ? duplicateCounts.phones[phoneKey] || 0 : 0;
 
-                          {business.email ? (
-                            <div className="flex items-center gap-1.5 text-slate-700 text-[11px]">
-                              <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate max-w-[130px]">{business.email}</span>
-                            </div>
-                          ) : null}
+                          const whatsappKey = normalizePhone(business.whatsapp);
+                          const whatsappDup = whatsappKey && duplicateCounts?.phones ? duplicateCounts.phones[whatsappKey] || 0 : 0;
 
-                          {business.website ? (
-                            <div className="flex items-center gap-1.5 text-indigo-600 text-[11px]">
-                              <Globe className="w-3 h-3 text-slate-400 shrink-0" />
-                              <a
-                                href={
-                                  business.website.startsWith("http")
-                                    ? business.website
-                                    : `https://${business.website}`
-                                }
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="truncate max-w-[130px] hover:underline"
-                              >
-                                {business.website.replace(/^https?:\/\/(www\.)?/, "")}
-                              </a>
+                          return (
+                            <div className="space-y-1 text-xs">
+                              {business.phone ? (
+                                <div className="flex items-center gap-1.5 text-slate-700 font-mono text-[11px]">
+                                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{business.phone}</span>
+                                  {phoneDup > 1 && (
+                                    <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
+                                      ({phoneDup})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : null}
+
+                              {business.whatsapp ? (
+                                <div className="flex items-center gap-1.5 text-emerald-700 font-mono text-[11px]">
+                                  <MessageSquare className="w-3 h-3 text-emerald-500 shrink-0" />
+                                  <span>{business.whatsapp}</span>
+                                  {whatsappDup > 1 && (
+                                    <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
+                                      ({whatsappDup})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : null}
+
+                              {business.email ? (
+                                <div className="flex items-center gap-1.5 text-slate-700 text-[11px]">
+                                  <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span className="truncate max-w-[130px]">{business.email}</span>
+                                  {emailDup > 1 && (
+                                    <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
+                                      ({emailDup})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : null}
+
+                              {business.website ? (
+                                <div className="flex items-center gap-1.5 text-indigo-600 text-[11px]">
+                                  <Globe className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <a
+                                    href={
+                                      business.website.startsWith("http")
+                                        ? business.website
+                                        : `https://${business.website}`
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="truncate max-w-[130px] hover:underline"
+                                  >
+                                    {business.website.replace(/^https?:\/\/(www\.)?/, "")}
+                                  </a>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">No website</span>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-[10px] text-slate-400">No website</span>
-                          )}
-                        </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Location & Google Maps Place link */}
@@ -710,7 +754,7 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="p-0">
+                  <td colSpan={11} className="p-0">
                     <EmptyState
                       icon={<Compass className="w-6 h-6 text-indigo-600" />}
                       title="No businesses found in Lead Finder"

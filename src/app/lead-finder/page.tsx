@@ -19,7 +19,9 @@ import {
   Briefcase,
   Globe,
   Lightbulb,
+  AlertTriangle,
 } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 
 export default function LeadFinderPage() {
   const { showToast } = useToast();
@@ -44,6 +46,12 @@ export default function LeadFinderPage() {
 
   // Management Modal State
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+
+  // Duplicate Search Modal State
+  const [duplicateSearchModalOpen, setDuplicateSearchModalOpen] = useState(false);
+
+  // Delete Business Confirmation State
+  const [businessToDelete, setBusinessToDelete] = useState<LeadFinderBusinessItem | null>(null);
 
   // 1. Fetch Recent Searches from MongoDB
   const fetchRecentSearches = useCallback(async () => {
@@ -121,7 +129,7 @@ export default function LeadFinderPage() {
                   s.city.toLowerCase() === data.search.city.toLowerCase()
                 )
             ),
-          ].slice(0, 10));
+          ]);
         }
       }
     } catch (err) {
@@ -187,11 +195,35 @@ export default function LeadFinderPage() {
       return;
     }
 
-    const query = `${selectedCategory.trim()}, ${cityLocation.trim()}, ${selectedCountry.trim()}`;
+    const categoryTrim = selectedCategory.trim();
+    const countryTrim = selectedCountry.trim();
+    const cityTrim = cityLocation.trim();
+    const query = `${categoryTrim}, ${cityTrim}, ${countryTrim}`;
+
+    // Requirement 4: Prevent duplicate search if location/search already exists in Recent Searches
+    const isAlreadySearched = recentSearches.some((s) => {
+      const sQuery = (s.query || `${s.category}, ${s.city}, ${s.country}`).toLowerCase().trim();
+      const currentQuery = query.toLowerCase().trim();
+      if (sQuery === currentQuery) return true;
+      if (
+        s.category.toLowerCase().trim() === categoryTrim.toLowerCase() &&
+        s.city.toLowerCase().trim() === cityTrim.toLowerCase() &&
+        s.country.toLowerCase().trim() === countryTrim.toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (isAlreadySearched) {
+      setDuplicateSearchModalOpen(true);
+      return;
+    }
+
     const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
 
     window.open(mapsUrl, "_blank", "noopener,noreferrer");
-    saveRecentSearch(selectedCategory.trim(), selectedCountry.trim(), cityLocation.trim());
+    saveRecentSearch(categoryTrim, countryTrim, cityTrim);
 
     showToast({
       type: "info",
@@ -359,17 +391,12 @@ export default function LeadFinderPage() {
     }
   };
 
-  // Delete Business from Finder
-  const handleDeleteBusiness = async (business: LeadFinderBusinessItem) => {
-    const isProtected = business.isConnected;
-    const confirmPrompt = isProtected
-      ? `Delete "${business.businessName}" from Lead Finder?\n\nNote: Because this is a Protected Connected Lead, it will remain 100% safe in your Leads data.`
-      : `Delete "${business.businessName}" from Lead Finder?`;
+  // Delete Business from Finder - opens confirmation modal (Requirement 5)
+  const handleDeleteBusiness = (business: LeadFinderBusinessItem) => {
+    setBusinessToDelete(business);
+  };
 
-    if (!window.confirm(confirmPrompt)) {
-      return;
-    }
-
+  const executeDeleteBusiness = async (business: LeadFinderBusinessItem) => {
     try {
       const res = await fetch(`/api/lead-finder/${business.id}`, {
         method: "DELETE",
@@ -606,6 +633,86 @@ export default function LeadFinderPage() {
         countries={countries}
         onCountriesChange={handleCountriesChange}
       />
+
+      {/* Duplicate Google Maps Search Modal (Requirement 4) */}
+      <Modal
+        isOpen={duplicateSearchModalOpen}
+        onClose={() => setDuplicateSearchModalOpen(false)}
+        maxWidth="sm"
+        title={
+          <div className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="w-5 h-5" />
+            <span>Search Already Conducted</span>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-800 leading-relaxed font-semibold">
+            You have already searched this location.
+          </p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            The search query for{" "}
+            <strong className="text-slate-700">
+              &quot;{selectedCategory}, {cityLocation}, {selectedCountry}&quot;
+            </strong>{" "}
+            already exists in your Recent Google Maps Searches. You can search that location again ONLY by using the existing shortcut in the Recent Google Maps Searches section below.
+          </p>
+
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setDuplicateSearchModalOpen(false)}
+            >
+              Understood
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Lead Finder Business Confirmation Modal (Requirement 5) */}
+      <Modal
+        isOpen={Boolean(businessToDelete)}
+        onClose={() => setBusinessToDelete(null)}
+        maxWidth="sm"
+        title={
+          <div className="flex items-center gap-2 text-rose-600">
+            <AlertTriangle className="w-5 h-5" />
+            <span>Delete Finder Business?</span>
+          </div>
+        }
+      >
+        {businessToDelete && (
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete{" "}
+              <strong className="text-slate-900">&quot;{businessToDelete.businessName}&quot;</strong> from Lead Finder?
+              {businessToDelete.isConnected && (
+                <span className="block mt-2 text-indigo-600 font-medium">
+                  Note: Because this is a Protected Connected Lead, it will remain 100% safe in your Leads data.
+                </span>
+              )}
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setBusinessToDelete(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={async () => {
+                  const b = businessToDelete;
+                  setBusinessToDelete(null);
+                  await executeDeleteBusiness(b);
+                }}
+              >
+                Yes, Delete Business
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

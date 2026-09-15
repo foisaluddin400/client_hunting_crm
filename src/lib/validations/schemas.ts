@@ -93,6 +93,8 @@ export const leadCreateSchema = z.object({
   leadScore: z.coerce.number().min(0).max(100).optional(),
   notes: z.string().optional(),
   avatarColor: z.string().optional(),
+  googleMapsUrl: z.string().optional(),
+  link: z.string().optional(),
 });
 
 export const leadUpdateSchema = leadCreateSchema.partial();

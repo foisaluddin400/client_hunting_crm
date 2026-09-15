@@ -9,14 +9,11 @@ import {
   LeadFiltersState,
 } from "@/lib/types";
 import { SearchInput } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import {
-  Filter,
   X,
   RotateCcw,
   SlidersHorizontal,
-  ChevronDown,
 } from "lucide-react";
 
 interface LeadFiltersProps {
@@ -32,12 +29,23 @@ export function LeadFilters({
   onClearFilters,
   activeFilterCount,
 }: LeadFiltersProps) {
-  const { categories } = useCRM();
+  const { leads, categories } = useCRM();
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const dynamicCategories = categories.filter(
     (c) => c.toLowerCase() !== "others" && c.toLowerCase() !== "other"
   );
+
+  const locationOptions = React.useMemo(() => {
+    const map = new Map<string, number>();
+    leads.forEach((l) => {
+      const loc = (l.location || "").trim();
+      if (loc && loc.toLowerCase() !== "not specified") {
+        map.set(loc, (map.get(loc) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [leads]);
 
   return (
     <div className="space-y-3">
@@ -55,6 +63,24 @@ export function LeadFilters({
 
         {/* Quick Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Location Filter Dropdown */}
+          <select
+            value={filters.location || "all"}
+            onChange={(e) =>
+              onFilterChange({
+                location: e.target.value === "all" ? "" : e.target.value,
+              })
+            }
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
+          >
+            <option value="all">Location: All</option>
+            {locationOptions.map(([loc, count]) => (
+              <option key={loc} value={loc}>
+                {loc} ({count})
+              </option>
+            ))}
+          </select>
+
           {/* Website Status Filter */}
           <select
             value={filters.websiteStatus}
@@ -195,13 +221,22 @@ export function LeadFilters({
             <label className="text-[11px] font-bold text-slate-500 block mb-1">
               Location / City
             </label>
-            <input
-              type="text"
-              value={filters.location}
-              onChange={(e) => onFilterChange({ location: e.target.value })}
-              placeholder="e.g. Austin, Wichita, Miami..."
+            <select
+              value={filters.location || "all"}
+              onChange={(e) =>
+                onFilterChange({
+                  location: e.target.value === "all" ? "" : e.target.value,
+                })
+              }
               className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-            />
+            >
+              <option value="all">Location: All</option>
+              {locationOptions.map(([loc, count]) => (
+                <option key={loc} value={loc}>
+                  {loc} ({count})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

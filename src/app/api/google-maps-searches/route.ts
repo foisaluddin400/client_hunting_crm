@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
-import { GoogleMapsSearch } from "@/lib/models";
+import { GoogleMapsSearch, LeadFinderBusiness, Lead } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -16,17 +16,56 @@ export async function GET(req: NextRequest) {
 
     const searches = await GoogleMapsSearch.find({ userId })
       .sort({ createdAt: -1 })
-      .limit(10)
       .lean();
 
-    const formatted = searches.map((s) => ({
-      id: s._id.toString(),
-      category: s.category,
-      country: s.country,
-      city: s.city,
-      query: s.query,
-      timestamp: new Date(s.createdAt).toISOString(),
-    }));
+    const [finderDocs, leadDocs] = await Promise.all([
+      LeadFinderBusiness.find({ userId }).select("location fullAddress leadId").lean(),
+      Lead.find({ userId }).select("location finderBusinessId").lean(),
+    ]);
+
+    const existingFinderIds = new Set(finderDocs.map((f) => f._id.toString()));
+
+    const formatted = searches.map((s) => {
+      const normQuery = s.query.trim().toLowerCase();
+      const altQuery = `${s.category.trim()}, ${s.city.trim()}, ${s.country.trim()}`.toLowerCase();
+
+      let count = 0;
+
+      // Count matching LeadFinderBusiness records
+      for (const f of finderDocs) {
+        const loc = (f.location || "").trim().toLowerCase();
+        const addr = (f.fullAddress || "").trim().toLowerCase();
+        if (
+          loc === normQuery ||
+          loc === altQuery ||
+          (!loc && addr && addr.includes(s.city.toLowerCase()) && addr.includes(s.country.toLowerCase()))
+        ) {
+          count++;
+        }
+      }
+
+      // Count any Lead that was preserved when finder business was deleted
+      for (const l of leadDocs) {
+        const isOrphanedLead =
+          !l.finderBusinessId || !existingFinderIds.has(l.finderBusinessId.toString());
+        if (isOrphanedLead) {
+          const loc = (l.location || "").trim().toLowerCase();
+          if (loc === normQuery || loc === altQuery) {
+            count++;
+          }
+        }
+      }
+
+      return {
+        id: s._id.toString(),
+        category: s.category,
+        country: s.country,
+        city: s.city,
+        query: s.query,
+        businessCount: count,
+        timestamp: new Date(s.createdAt).toISOString(),
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -83,15 +122,7 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
     });
 
-    // Keep only the latest 10 searches for this user
-    const totalSearches = await GoogleMapsSearch.find({ userId })
-      .sort({ createdAt: -1 })
-      .lean();
 
-    if (totalSearches.length > 10) {
-      const idsToRemove = totalSearches.slice(10).map((s) => s._id);
-      await GoogleMapsSearch.deleteMany({ _id: { $in: idsToRemove } });
-    }
 
     return NextResponse.json(
       {

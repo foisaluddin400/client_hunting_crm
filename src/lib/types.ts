@@ -59,6 +59,7 @@ export interface Lead {
   foundAt?: string;
   finderBusinessId?: string;
   googleMapsUrl?: string;
+  link?: string;
   auditStatus?: "NOT_AUDITED" | "AUDITING" | "COMPLETED" | "FAILED";
   auditScore?: number;
   lastAuditedAt?: string;
@@ -134,6 +135,7 @@ export interface LeadFinderBusinessItem {
   twitter?: string | null;
   website?: string | null;
   fullAddress?: string | null;
+  location?: string | null;
   googleMapsUrl?: string | null;
   foundAt: string;
   isSelected: boolean;

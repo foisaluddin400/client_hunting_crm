@@ -1,15 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
-import { Lead, Channel, LeadStatus, WebsiteAuditItem } from "@/lib/types";
+import React, { useState, useEffect } from "react";
+import { Lead, LeadStatus, WebsiteAuditItem } from "@/lib/types";
 import { useCRM } from "@/lib/context/crm-context";
-import { LeadStatusBadge, WebsiteStatusBadge } from "@/components/ui/Badge";
+import { WebsiteStatusBadge } from "@/components/ui/Badge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { Pagination } from "@/components/ui/Pagination";
 import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { exportLeadsToCSV } from "@/lib/utils";
 import { AuditDetailsModal } from "./AuditDetailsModal";
+import {
+  normalizeEmail,
+  normalizePhone,
+  normalizeSocialUrl,
+  DuplicateContactCounts,
+} from "@/lib/duplicate-detector";
 import {
   TwitterXIcon,
   LinkedinIcon,
@@ -29,7 +35,6 @@ import {
   Download,
   CheckSquare,
   Square,
-  ChevronDown,
   Bot,
   Loader2,
 } from "lucide-react";
@@ -76,6 +81,30 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
+
+  const [duplicateCounts, setDuplicateCounts] = useState<DuplicateContactCounts | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/contacts/duplicates")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data?.counts) {
+          setDuplicateCounts(data.counts);
+        }
+      })
+      .catch((err) => console.error("Failed to load duplicate counts:", err));
+    return () => {
+      isMounted = false;
+    };
+  }, [leads]);
+
+  const isChannelContacted = (lead: Lead, channel: string) => {
+    if (!lead.activities || !Array.isArray(lead.activities)) return false;
+    return lead.activities.some(
+      (act) => act.channel && act.channel.toLowerCase() === channel.toLowerCase()
+    );
+  };
 
   // Website Audit Details Modal state
   const [auditModalOpen, setAuditModalOpen] = useState(false);
@@ -216,6 +245,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                     )}
                   </button>
                 </th>
+                <th className="p-4 w-12 text-center">SI.N</th>
                 <th className="p-4">Business & Contact</th>
                 <th className="p-4">Location</th>
                 <th className="p-4">Website Status</th>
@@ -231,17 +261,22 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
             <tbody className="divide-y divide-slate-100 text-xs">
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRowSkeleton key={i} columns={10} />
+                  <TableRowSkeleton key={i} columns={11} />
                 ))
               ) : paginatedLeads.length > 0 ? (
-                paginatedLeads.map((lead) => {
+                paginatedLeads.map((lead, index) => {
                   const isSelected = selectedLeadIds.includes(lead.id);
+                  const isNotNew = lead.status !== "New";
 
                   return (
                     <tr
                       key={lead.id}
-                      className={`hover:bg-slate-50/80 transition-colors group ${
-                        isSelected ? "bg-indigo-50/40" : ""
+                      className={`transition-colors group ${
+                        isSelected
+                          ? "bg-indigo-50/40 hover:bg-indigo-50/60"
+                          : isNotNew
+                          ? "bg-emerald-50/35 hover:bg-emerald-50/60 border-l-2 border-emerald-500/60"
+                          : "hover:bg-slate-50/80"
                       }`}
                     >
                       {/* Checkbox */}
@@ -257,6 +292,11 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                             <Square className="w-4 h-4" />
                           )}
                         </button>
+                      </td>
+
+                      {/* Serial Number */}
+                      <td className="p-4 text-center font-mono text-slate-500 font-semibold text-xs">
+                        {(currentPage - 1) * pageSize + index + 1}
                       </td>
 
                       {/* Business & CEO Name */}
@@ -300,6 +340,18 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                               className="text-[11px] text-indigo-600 hover:underline inline-flex items-center gap-1 font-medium pl-5"
                             >
                               <span>View on Maps</span>
+                              <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                            </a>
+                          )}
+                          {lead.link && (
+                            <a
+                              href={lead.link.startsWith("http") ? lead.link : `https://${lead.link}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-slate-500 hover:text-indigo-600 hover:underline inline-flex items-center gap-1 font-medium pl-5 truncate max-w-[140px]"
+                              title={lead.link}
+                            >
+                              <span>Source Link</span>
                               <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                             </a>
                           )}
@@ -417,119 +469,202 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
 
                       {/* Contact Channel Action Icons */}
                       <td className="p-4">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* Email */}
-                          {lead.email ? (
-                            <Tooltip content={`Send Email (${lead.email})`}>
-                              <button
-                                type="button"
-                                onClick={() => openOutreach(lead, "email")}
-                                className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-200 transition-all shadow-2xs"
-                                aria-label="Send Email"
-                              >
-                                <Mail className="w-3.5 h-3.5" />
-                              </button>
-                            </Tooltip>
-                          ) : (
-                            <span className="p-1.5 text-slate-200 cursor-not-allowed">
-                              <Mail className="w-3.5 h-3.5" />
-                            </span>
-                          )}
+                        {(() => {
+                          const isEmailContacted = isChannelContacted(lead, "email");
+                          const isWhatsAppContacted = isChannelContacted(lead, "whatsapp");
+                          const isLinkedInContacted = isChannelContacted(lead, "linkedin");
+                          const isInstagramContacted = isChannelContacted(lead, "instagram");
+                          const isFacebookContacted = isChannelContacted(lead, "facebook");
+                          const isTwitterContacted = isChannelContacted(lead, "twitter");
 
-                          {/* WhatsApp */}
-                          {lead.whatsapp || lead.phone ? (
-                            <Tooltip
-                              content={`Open WhatsApp (${
-                                lead.whatsapp || lead.phone
-                              })`}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => openOutreach(lead, "whatsapp")}
-                                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-[#25D366] hover:text-white border border-emerald-200 transition-all shadow-2xs"
-                                aria-label="Open WhatsApp"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                              </button>
-                            </Tooltip>
-                          ) : (
-                            <span className="p-1.5 text-slate-200 cursor-not-allowed">
-                              <MessageSquare className="w-3.5 h-3.5" />
-                            </span>
-                          )}
+                          const emailKey = normalizeEmail(lead.email);
+                          const emailDup = emailKey && duplicateCounts?.emails ? duplicateCounts.emails[emailKey] || 0 : 0;
 
-                          {/* LinkedIn */}
-                          {lead.linkedin ? (
-                            <Tooltip content="Open LinkedIn">
-                              <button
-                                type="button"
-                                onClick={() => openOutreach(lead, "linkedin")}
-                                className="p-1.5 rounded-lg bg-sky-50 text-[#0A66C2] hover:bg-[#0A66C2] hover:text-white border border-sky-200 transition-all shadow-2xs"
-                                aria-label="Open LinkedIn"
-                              >
-                                <LinkedinIcon className="w-3.5 h-3.5" />
-                              </button>
-                            </Tooltip>
-                          ) : (
-                            <span className="p-1.5 text-slate-200 cursor-not-allowed">
-                              <LinkedinIcon className="w-3.5 h-3.5" />
-                            </span>
-                          )}
+                          const phoneKey = normalizePhone(lead.whatsapp || lead.phone);
+                          const phoneDup = phoneKey && duplicateCounts?.phones ? duplicateCounts.phones[phoneKey] || 0 : 0;
 
-                          {/* Instagram */}
-                          {lead.instagram ? (
-                            <Tooltip content="Open Instagram DM">
-                              <button
-                                type="button"
-                                onClick={() => openOutreach(lead, "instagram")}
-                                className="p-1.5 rounded-lg bg-pink-50 text-[#E1306C] hover:bg-[#E1306C] hover:text-white border border-pink-200 transition-all shadow-2xs"
-                                aria-label="Open Instagram"
-                              >
-                                <InstagramIcon className="w-3.5 h-3.5" />
-                              </button>
-                            </Tooltip>
-                          ) : (
-                            <span className="p-1.5 text-slate-200 cursor-not-allowed">
-                              <InstagramIcon className="w-3.5 h-3.5" />
-                            </span>
-                          )}
+                          const linkedinKey = normalizeSocialUrl(lead.linkedin);
+                          const linkedinDup = linkedinKey && duplicateCounts?.linkedins ? duplicateCounts.linkedins[linkedinKey] || 0 : 0;
 
-                          {/* Facebook */}
-                          {lead.facebook ? (
-                            <Tooltip content="Open Facebook">
-                              <button
-                                type="button"
-                                onClick={() => openOutreach(lead, "facebook")}
-                                className="p-1.5 rounded-lg bg-blue-50 text-[#1877F2] hover:bg-[#1877F2] hover:text-white border border-blue-200 transition-all shadow-2xs"
-                                aria-label="Open Facebook"
-                              >
-                                <FacebookIcon className="w-3.5 h-3.5" />
-                              </button>
-                            </Tooltip>
-                          ) : (
-                            <span className="p-1.5 text-slate-200 cursor-not-allowed">
-                              <FacebookIcon className="w-3.5 h-3.5" />
-                            </span>
-                          )}
+                          const instaKey = normalizeSocialUrl(lead.instagram);
+                          const instaDup = instaKey && duplicateCounts?.instagrams ? duplicateCounts.instagrams[instaKey] || 0 : 0;
 
-                          {/* Twitter / X */}
-                          {lead.twitter ? (
-                            <Tooltip content="Open Twitter/X DM">
-                              <button
-                                type="button"
-                                onClick={() => openOutreach(lead, "twitter")}
-                                className="p-1.5 rounded-lg bg-zinc-100 text-zinc-800 hover:bg-black hover:text-white border border-zinc-200 transition-all shadow-2xs"
-                                aria-label="Open Twitter/X"
-                              >
-                                <TwitterXIcon className="w-3.5 h-3.5" />
-                              </button>
-                            </Tooltip>
-                          ) : (
-                            <span className="p-1.5 text-slate-200 cursor-not-allowed">
-                              <TwitterXIcon className="w-3.5 h-3.5" />
-                            </span>
-                          )}
-                        </div>
+                          const fbKey = normalizeSocialUrl(lead.facebook);
+                          const fbDup = fbKey && duplicateCounts?.facebooks ? duplicateCounts.facebooks[fbKey] || 0 : 0;
+
+                          const twitterKey = normalizeSocialUrl(lead.twitter);
+                          const twitterDup = twitterKey && duplicateCounts?.twitters ? duplicateCounts.twitters[twitterKey] || 0 : 0;
+
+                          return (
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Email */}
+                              {lead.email ? (
+                                <Tooltip content={`Send Email (${lead.email})`}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openOutreach(lead, "email")}
+                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                      isEmailContacted
+                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                        : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border-indigo-200"
+                                    }`}
+                                    aria-label="Send Email"
+                                  >
+                                    <Mail className="w-3.5 h-3.5" />
+                                    {emailDup > 1 && (
+                                      <span className={`text-[10px] font-bold ${isEmailContacted ? "text-white" : "text-indigo-700"}`}>
+                                        ({emailDup})
+                                      </span>
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ) : (
+                                <span className="p-1.5 text-slate-200 cursor-not-allowed">
+                                  <Mail className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+
+                              {/* WhatsApp */}
+                              {lead.whatsapp || lead.phone ? (
+                                <Tooltip
+                                  content={`Open WhatsApp (${
+                                    lead.whatsapp || lead.phone
+                                  })`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => openOutreach(lead, "whatsapp")}
+                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                      isWhatsAppContacted
+                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                        : "bg-emerald-50 text-emerald-600 hover:bg-[#25D366] hover:text-white border-emerald-200"
+                                    }`}
+                                    aria-label="Open WhatsApp"
+                                  >
+                                    <MessageSquare className="w-3.5 h-3.5" />
+                                    {phoneDup > 1 && (
+                                      <span className={`text-[10px] font-bold ${isWhatsAppContacted ? "text-white" : "text-emerald-700"}`}>
+                                        ({phoneDup})
+                                      </span>
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ) : (
+                                <span className="p-1.5 text-slate-200 cursor-not-allowed">
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+
+                              {/* LinkedIn */}
+                              {lead.linkedin ? (
+                                <Tooltip content="Open LinkedIn">
+                                  <button
+                                    type="button"
+                                    onClick={() => openOutreach(lead, "linkedin")}
+                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                      isLinkedInContacted
+                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                        : "bg-sky-50 text-[#0A66C2] hover:bg-[#0A66C2] hover:text-white border-sky-200"
+                                    }`}
+                                    aria-label="Open LinkedIn"
+                                  >
+                                    <LinkedinIcon className="w-3.5 h-3.5" />
+                                    {linkedinDup > 1 && (
+                                      <span className={`text-[10px] font-bold ${isLinkedInContacted ? "text-white" : "text-[#0A66C2]"}`}>
+                                        ({linkedinDup})
+                                      </span>
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ) : (
+                                <span className="p-1.5 text-slate-200 cursor-not-allowed">
+                                  <LinkedinIcon className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+
+                              {/* Instagram */}
+                              {lead.instagram ? (
+                                <Tooltip content="Open Instagram DM">
+                                  <button
+                                    type="button"
+                                    onClick={() => openOutreach(lead, "instagram")}
+                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                      isInstagramContacted
+                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                        : "bg-pink-50 text-[#E1306C] hover:bg-[#E1306C] hover:text-white border-pink-200"
+                                    }`}
+                                    aria-label="Open Instagram"
+                                  >
+                                    <InstagramIcon className="w-3.5 h-3.5" />
+                                    {instaDup > 1 && (
+                                      <span className={`text-[10px] font-bold ${isInstagramContacted ? "text-white" : "text-[#E1306C]"}`}>
+                                        ({instaDup})
+                                      </span>
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ) : (
+                                <span className="p-1.5 text-slate-200 cursor-not-allowed">
+                                  <InstagramIcon className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+
+                              {/* Facebook */}
+                              {lead.facebook ? (
+                                <Tooltip content="Open Facebook">
+                                  <button
+                                    type="button"
+                                    onClick={() => openOutreach(lead, "facebook")}
+                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                      isFacebookContacted
+                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                        : "bg-blue-50 text-[#1877F2] hover:bg-[#1877F2] hover:text-white border-blue-200"
+                                    }`}
+                                    aria-label="Open Facebook"
+                                  >
+                                    <FacebookIcon className="w-3.5 h-3.5" />
+                                    {fbDup > 1 && (
+                                      <span className={`text-[10px] font-bold ${isFacebookContacted ? "text-white" : "text-[#1877F2]"}`}>
+                                        ({fbDup})
+                                      </span>
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ) : (
+                                <span className="p-1.5 text-slate-200 cursor-not-allowed">
+                                  <FacebookIcon className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+
+                              {/* Twitter / X */}
+                              {lead.twitter ? (
+                                <Tooltip content="Open Twitter/X DM">
+                                  <button
+                                    type="button"
+                                    onClick={() => openOutreach(lead, "twitter")}
+                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                      isTwitterContacted
+                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                        : "bg-zinc-100 text-zinc-800 hover:bg-black hover:text-white border-zinc-200"
+                                    }`}
+                                    aria-label="Open Twitter/X"
+                                  >
+                                    <TwitterXIcon className="w-3.5 h-3.5" />
+                                    {twitterDup > 1 && (
+                                      <span className={`text-[10px] font-bold ${isTwitterContacted ? "text-white" : "text-zinc-800"}`}>
+                                        ({twitterDup})
+                                      </span>
+                                    )}
+                                  </button>
+                                </Tooltip>
+                              ) : (
+                                <span className="p-1.5 text-slate-200 cursor-not-allowed">
+                                  <TwitterXIcon className="w-3.5 h-3.5" />
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Lead Status Inline Selector */}
@@ -611,7 +746,7 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="p-0">
+                  <td colSpan={11} className="p-0">
                     <EmptyState
                       icon={<Users className="w-6 h-6 text-indigo-600" />}
                       title="No leads match your criteria"

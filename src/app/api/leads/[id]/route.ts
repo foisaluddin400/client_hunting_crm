@@ -98,6 +98,8 @@ export async function PATCH(
     if (data.leadScore !== undefined) updateFields.leadScore = data.leadScore;
     if (data.notes !== undefined) updateFields.notes = data.notes.trim();
     if (data.avatarColor !== undefined) updateFields.avatarColor = data.avatarColor;
+    if (data.googleMapsUrl !== undefined) updateFields.googleMapsUrl = data.googleMapsUrl?.trim() || undefined;
+    if (data.link !== undefined) updateFields.link = data.link?.trim() || undefined;
 
     const updatedLead = await Lead.findOneAndUpdate(
       { _id: id, userId: authUser.userId },
@@ -122,6 +124,8 @@ export async function PATCH(
     if (updateFields.linkedin !== undefined) finderUpdates.linkedin = updateFields.linkedin;
     if (updateFields.twitter !== undefined) finderUpdates.twitter = updateFields.twitter;
     if (updateFields.website !== undefined) finderUpdates.website = updateFields.website;
+    if (updateFields.googleMapsUrl !== undefined) finderUpdates.googleMapsUrl = updateFields.googleMapsUrl || null;
+    if (updateFields.location) finderUpdates.location = updateFields.location;
 
     if (Object.keys(finderUpdates).length > 0) {
       const finderQueryOr: any[] = [{ leadId: updatedLead._id }];

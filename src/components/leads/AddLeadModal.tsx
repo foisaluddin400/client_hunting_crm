@@ -22,6 +22,8 @@ import {
   MessageSquare,
   Sparkles,
   Briefcase,
+  ExternalLink,
+  Link as LinkIcon,
 } from "lucide-react";
 
 export function AddLeadModal() {
@@ -50,6 +52,8 @@ export function AddLeadModal() {
   const [instagram, setInstagram] = useState("");
   const [facebook, setFacebook] = useState("");
   const [twitter, setTwitter] = useState("");
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
+  const [link, setLink] = useState("");
   const [notes, setNotes] = useState("");
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -91,6 +95,8 @@ export function AddLeadModal() {
         setInstagram(leadToEdit.instagram || "");
         setFacebook(leadToEdit.facebook || "");
         setTwitter(leadToEdit.twitter || "");
+        setGoogleMapsUrl(leadToEdit.googleMapsUrl || "");
+        setLink(leadToEdit.link || "");
         setNotes(leadToEdit.notes || "");
       }
     } else {
@@ -125,6 +131,8 @@ export function AddLeadModal() {
       setInstagram(initialData?.instagram || "");
       setFacebook(initialData?.facebook || "");
       setTwitter(initialData?.twitter || "");
+      setGoogleMapsUrl(initialData?.googleMapsUrl || "");
+      setLink(initialData?.link || "");
       setNotes(initialData?.notes || "");
     }
     setErrors({});
@@ -173,6 +181,8 @@ export function AddLeadModal() {
       instagram: instagram.trim() || undefined,
       facebook: facebook.trim() || undefined,
       twitter: twitter.trim() || undefined,
+      googleMapsUrl: googleMapsUrl.trim() || undefined,
+      link: link.trim() || undefined,
       status,
       notes: notes.trim() || undefined,
     };
@@ -290,6 +300,27 @@ export function AddLeadModal() {
               <option value="Other">Other / Good Site</option>
             </Select>
           </div>
+        </div>
+
+        {/* View on Maps & Source Link Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Input
+            label="View on Maps"
+            placeholder="https://www.google.com/maps/place/..."
+            value={googleMapsUrl}
+            onChange={(e) => setGoogleMapsUrl(e.target.value)}
+            leftIcon={<ExternalLink className="w-4 h-4 text-indigo-600" />}
+            helperText="Google Maps business URL"
+          />
+
+          <Input
+            label="Link"
+            placeholder="e.g. Website, directory, Facebook page..."
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            leftIcon={<LinkIcon className="w-4 h-4 text-slate-500" />}
+            helperText="Source link where obtained (optional)"
+          />
         </div>
 
         {/* Social & Contact Channels */}

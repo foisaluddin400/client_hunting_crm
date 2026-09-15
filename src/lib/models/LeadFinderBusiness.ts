@@ -17,6 +17,7 @@ export interface ILeadFinderBusiness extends Document {
   twitter?: string | null;
   website?: string | null;
   fullAddress?: string | null;
+  location?: string | null;
   googleMapsUrl?: string | null;
   foundAt: Date;
   isConfirmed: boolean;
@@ -108,6 +109,12 @@ const LeadFinderBusinessSchema = new Schema<ILeadFinderBusiness>(
       type: String,
       default: null,
       trim: true,
+    },
+    location: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
     },
     googleMapsUrl: {
       type: String,

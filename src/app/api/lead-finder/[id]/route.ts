@@ -50,7 +50,7 @@ export async function PATCH(
               userId,
               businessName: finderDoc.businessName,
               industry: finderDoc.businessCategory || "Other",
-              location: finderDoc.fullAddress || "Not specified",
+              location: finderDoc.location || finderDoc.fullAddress || "Not specified",
               website: finderDoc.website || undefined,
               websiteStatus: finderDoc.website ? "OTHER" : "NO_WEBSITE",
               email: finderDoc.email || undefined,
@@ -69,7 +69,7 @@ export async function PATCH(
           } else {
             linkedLead.businessName = finderDoc.businessName;
             if (finderDoc.businessCategory) linkedLead.industry = finderDoc.businessCategory;
-            if (finderDoc.fullAddress) linkedLead.location = finderDoc.fullAddress;
+            if (finderDoc.location || finderDoc.fullAddress) linkedLead.location = (finderDoc.location || finderDoc.fullAddress) as string;
             if (finderDoc.email) linkedLead.email = finderDoc.email;
             if (leadWhatsapp) linkedLead.whatsapp = leadWhatsapp;
             if (leadPhone) linkedLead.phone = leadPhone;
@@ -167,6 +167,8 @@ export async function PATCH(
     if (body.totalReviews !== undefined) updateFields.totalReviews = body.totalReviews;
     if (body.openClosed !== undefined) updateFields.openClosed = body.openClosed;
     if (body.openingHours !== undefined) updateFields.openingHours = body.openingHours;
+    if (body.googleMapsUrl !== undefined) updateFields.googleMapsUrl = body.googleMapsUrl?.trim() || null;
+    if (body.location !== undefined) updateFields.location = body.location?.trim() || null;
 
     // Check duplicate if core identifying fields are changed
     if (
@@ -226,6 +228,8 @@ export async function PATCH(
       if (updateFields.instagram !== undefined) leadUpdates.instagram = updateFields.instagram || undefined;
       if (updateFields.linkedin !== undefined) leadUpdates.linkedin = updateFields.linkedin || undefined;
       if (updateFields.twitter !== undefined) leadUpdates.twitter = updateFields.twitter || undefined;
+      if (updateFields.googleMapsUrl !== undefined) leadUpdates.googleMapsUrl = updateFields.googleMapsUrl || undefined;
+      if (updateFields.location !== undefined) leadUpdates.location = updateFields.location || undefined;
       if (updateFields.website !== undefined) {
         leadUpdates.website = updateFields.website || undefined;
         leadUpdates.websiteStatus = updateFields.website ? "OTHER" : "NO_WEBSITE";

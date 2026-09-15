@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { LeadFinderBusinessItem } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { Building2, Phone, Mail, Globe, MapPin, Tag, MessageSquare } from "lucide-react";
+import { Building2, Phone, Mail, Globe, MapPin, Tag, MessageSquare, ExternalLink } from "lucide-react";
 import {
   TwitterXIcon,
   LinkedinIcon,
@@ -38,6 +38,7 @@ export function EditFinderBusinessModal({
   const [instagram, setInstagram] = useState("");
   const [linkedin, setLinkedin] = useState("");
   const [twitter, setTwitter] = useState("");
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +55,7 @@ export function EditFinderBusinessModal({
       setInstagram(business.instagram || "");
       setLinkedin(business.linkedin || "");
       setTwitter(business.twitter || "");
+      setGoogleMapsUrl(business.googleMapsUrl || "");
       setError(null);
     }
   }, [business]);
@@ -82,6 +84,7 @@ export function EditFinderBusinessModal({
       instagram: instagram.trim() || null,
       linkedin: linkedin.trim() || null,
       twitter: twitter.trim() || null,
+      googleMapsUrl: googleMapsUrl.trim() || null,
     });
 
     setIsSaving(false);
@@ -231,6 +234,23 @@ export function EditFinderBusinessModal({
                 className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
               />
             </div>
+          </div>
+        </div>
+
+        {/* View on Maps Field */}
+        <div>
+          <label className="text-xs font-semibold text-slate-700 block mb-1">
+            View on Maps
+          </label>
+          <div className="relative flex items-center">
+            <ExternalLink className="absolute left-3 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={googleMapsUrl}
+              onChange={(e) => setGoogleMapsUrl(e.target.value)}
+              placeholder="https://www.google.com/maps/place/..."
+              className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+            />
           </div>
         </div>
 

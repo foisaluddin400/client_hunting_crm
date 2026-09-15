@@ -171,6 +171,8 @@ export async function POST(req: NextRequest) {
       leadScore: data.leadScore ?? 75,
       notes: data.notes?.trim() || undefined,
       avatarColor: data.avatarColor || "bg-indigo-600",
+      googleMapsUrl: data.googleMapsUrl?.trim() || undefined,
+      link: data.link?.trim() || undefined,
     });
 
     // Auto-create initial activity log
