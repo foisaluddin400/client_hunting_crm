@@ -189,6 +189,8 @@ export function transformLead(
     lastAuditedAt: lastAuditedStr,
     notes: cleanNotes,
     avatarColor: doc.avatarColor || "bg-indigo-600",
+    originalSenderEmail: doc.originalSenderEmail || undefined,
+    originalOutreachType: doc.originalOutreachType || undefined,
     activities: activities.map((a) => transformActivity(a)),
   };
 }
@@ -299,6 +301,8 @@ export function transformActivity(doc: IOutreachActivity | any): ActivityItem {
       : undefined,
     fullMessage: doc.message || undefined,
     status: statusMapped,
+    senderEmail: doc.senderEmail || undefined,
+    outreachType: doc.outreachType || undefined,
   };
 }
 
@@ -354,14 +358,28 @@ export function transformFollowUp(
   };
 }
 
+export function normalizeCategory(cat?: string): string {
+  if (!cat) return "General Introduction";
+  const c = cat.toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  if (c.includes("no website") || c.includes("web development")) return "No Website";
+  if (c.includes("redesign") || c.includes("web design")) return "Website Redesign";
+  if (c.includes("seo")) return "SEO Improvement";
+  if (c.includes("booking")) return "Booking System";
+  if (c.includes("custom")) return "Custom Website";
+  if (c.includes("mobile") || c.includes("app")) return "Mobile App";
+  if (c.includes("follow")) return "Follow-up";
+  if (c.includes("general") || c.includes("intro")) return "General Introduction";
+  return cat;
+}
+
 // Transform MessageTemplate DB document to frontend MessageTemplate
 export function transformTemplate(doc: IMessageTemplate | any): MessageTemplate {
   return {
     id: doc._id ? doc._id.toString() : doc.id,
     name: doc.name,
-    category: doc.category || "GENERAL",
+    category: normalizeCategory(doc.category),
     subject: doc.subject || undefined,
-    body: doc.message,
+    body: doc.message || doc.body || "",
     channels: ((doc.channels || ["email", "whatsapp", "linkedin"]) as string[]).map(
       (c) => c.toLowerCase() as Channel
     ),

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { leadId, channel, recipient, subject, message, status, notes } =
+    const { leadId, channel, recipient, subject, message, status, notes, senderEmail, outreachType } =
       parseResult.data;
 
     // Validate lead ownership
@@ -53,6 +53,8 @@ export async function POST(req: NextRequest) {
       message: message.trim(),
       status: stUpper,
       notes: notes?.trim() || undefined,
+      senderEmail: senderEmail?.trim() || undefined,
+      outreachType: outreachType?.trim() || undefined,
     });
 
     // Update lead lastContactAt and status
@@ -60,12 +62,29 @@ export async function POST(req: NextRequest) {
     if (lead.leadStatus === "NEW" || lead.leadStatus === "QUALIFIED") {
       lead.leadStatus = "CONTACTED";
     }
+
+    // Preserve original sender Gmail and outreach type from the first outreach
+    if (senderEmail?.trim() && !lead.originalSenderEmail) {
+      lead.originalSenderEmail = senderEmail.trim();
+    }
+    if (outreachType?.trim() && !lead.originalOutreachType) {
+      lead.originalOutreachType = outreachType.trim();
+    }
+
     await lead.save();
 
     return NextResponse.json({
       success: true,
       message: "Outreach activity saved successfully.",
       activity: transformActivity(activity.toObject ? activity.toObject() : activity),
+      lead: {
+        id: lead._id.toString(),
+        email: lead.email,
+        originalSenderEmail: lead.originalSenderEmail,
+        originalOutreachType: lead.originalOutreachType,
+        status: lead.leadStatus,
+        lastContact: lead.lastContactAt?.toISOString().split("T")[0],
+      },
     });
   } catch (err: any) {
     console.error("POST /api/outreach error:", err);

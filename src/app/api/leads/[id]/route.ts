@@ -100,6 +100,8 @@ export async function PATCH(
     if (data.avatarColor !== undefined) updateFields.avatarColor = data.avatarColor;
     if (data.googleMapsUrl !== undefined) updateFields.googleMapsUrl = data.googleMapsUrl?.trim() || undefined;
     if (data.link !== undefined) updateFields.link = data.link?.trim() || undefined;
+    if (data.originalSenderEmail !== undefined) updateFields.originalSenderEmail = data.originalSenderEmail.trim() || undefined;
+    if (data.originalOutreachType !== undefined) updateFields.originalOutreachType = data.originalOutreachType.trim() || undefined;
 
     const updatedLead = await Lead.findOneAndUpdate(
       { _id: id, userId: authUser.userId },
@@ -109,6 +111,13 @@ export async function PATCH(
 
     if (!updatedLead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    if (data.originalSenderEmail !== undefined) {
+      await OutreachActivity.updateMany(
+        { leadId: id, userId: authUser.userId, channel: "EMAIL" },
+        { $set: { senderEmail: data.originalSenderEmail.trim() || undefined } }
+      ).catch(() => {});
     }
 
     // Synchronize updates back to linked LeadFinderBusiness if exists

@@ -85,7 +85,8 @@ export function FollowUpCard({ item }: FollowUpCardProps) {
       openOutreach(
         lead,
         primaryChannel,
-        `Hi ${item.contactPerson || "there"},\n\nJust following up on my previous message regarding ${item.businessName}...`
+        undefined,
+        true
       );
     }
   };

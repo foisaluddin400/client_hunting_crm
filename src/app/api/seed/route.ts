@@ -3,6 +3,7 @@ import connectToDatabase from "@/lib/mongodb";
 import { Lead, MessageTemplate } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { DEFAULT_TEMPLATES } from "@/lib/mock-data/templates";
+import { normalizeCategory } from "@/lib/transformers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
       const templateDocs = DEFAULT_TEMPLATES.map((tpl) => ({
         userId,
         name: tpl.name,
-        category: tpl.category.toUpperCase().replace(/\s+/g, "_"),
+        category: normalizeCategory(tpl.category),
         subject: tpl.subject,
         message: tpl.body,
         channels: tpl.channels,

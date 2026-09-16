@@ -3,7 +3,7 @@ import connectToDatabase from "@/lib/mongodb";
 import { MessageTemplate } from "@/lib/models/MessageTemplate";
 import { getAuthUser } from "@/lib/auth";
 import { templateSchema } from "@/lib/validations/schemas";
-import { transformTemplate } from "@/lib/transformers";
+import { transformTemplate, normalizeCategory } from "@/lib/transformers";
 
 export async function PATCH(
   req: NextRequest,
@@ -33,7 +33,7 @@ export async function PATCH(
 
     if (data.name !== undefined) updateFields.name = data.name.trim();
     if (data.category !== undefined)
-      updateFields.category = data.category.toUpperCase().replace(/\s+/g, "_");
+      updateFields.category = normalizeCategory(data.category);
     if (data.subject !== undefined) updateFields.subject = data.subject.trim();
     if (data.message !== undefined) updateFields.message = data.message.trim();
     if (data.channels !== undefined) updateFields.channels = data.channels;

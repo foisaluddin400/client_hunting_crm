@@ -1,265 +1,181 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useCRM } from "@/lib/context/crm-context";
-import { useToast } from "@/lib/context/toast-context";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
-  Server,
-  KeyRound,
-  Eye,
-  EyeOff,
-  Shield,
-  ShieldCheck,
+  Mail,
+  Plus,
+  Trash2,
   CheckCircle2,
-  AlertTriangle,
-  Zap,
+  Info,
+  Shield,
 } from "lucide-react";
 
 export function SmtpSettings() {
-  const { smtpConfig, updateSmtpConfig, testSmtpConnection } = useCRM();
-  const { showToast } = useToast();
+  const { senderGmails, addSenderGmail, deleteSenderGmail } = useCRM();
+  const [newGmail, setNewGmail] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const [host, setHost] = useState(smtpConfig.host);
-  const [port, setPort] = useState(smtpConfig.port);
-  const [username, setUsername] = useState(smtpConfig.username);
-  const [password, setPassword] = useState(smtpConfig.password);
-  const [fromName, setFromName] = useState(smtpConfig.fromName);
-  const [fromEmail, setFromEmail] = useState(smtpConfig.fromEmail);
-  const [secure, setSecure] = useState(smtpConfig.secure);
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    const trimmed = newGmail.trim().toLowerCase();
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+    if (!trimmed) {
+      setErrorMsg("Please enter a Gmail address.");
+      return;
+    }
 
-  useEffect(() => {
-    setHost(smtpConfig.host);
-    setPort(smtpConfig.port);
-    setUsername(smtpConfig.username);
-    setFromName(smtpConfig.fromName);
-    setFromEmail(smtpConfig.fromEmail);
-    setSecure(smtpConfig.secure);
-  }, [smtpConfig]);
+    if (!trimmed.includes("@") || !trimmed.includes(".")) {
+      setErrorMsg("Please enter a valid email address.");
+      return;
+    }
 
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestResult(null);
+    setIsAdding(true);
+    const success = await addSenderGmail(trimmed);
+    setIsAdding(false);
 
-    const success = await testSmtpConnection({
-      host,
-      port,
-      username,
-      password: password || undefined,
-    });
-
-    setIsTesting(false);
     if (success) {
-      setTestResult({
-        success: true,
-        message: `Connected successfully to ${host}:${port}. TLS verification succeeded.`,
-      });
-    } else {
-      setTestResult({
-        success: false,
-        message: `Connection to ${host}:${port} failed. Please verify your host, port, username, and password.`,
-      });
+      setNewGmail("");
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    await updateSmtpConfig({
-      host,
-      port,
-      username,
-      password: password || undefined,
-      fromName,
-      fromEmail,
-      secure,
-    });
-    setIsSaving(false);
-  };
-
   return (
-    <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
-      {/* Security Info Alert Box */}
-      <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/90 flex items-start gap-3">
-        <Shield className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+    <div className="space-y-6 max-w-3xl">
+      {/* Information Alert Box */}
+      <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200/90 flex items-start gap-3">
+        <Info className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
         <div className="space-y-1 text-xs">
-          <h4 className="font-bold text-amber-900">
-            Secure SMTP Server Configuration
+          <h4 className="font-bold text-indigo-950">
+            Sender Gmail Accounts
           </h4>
-          <p className="text-amber-800 leading-relaxed">
-            Your SMTP host credentials are securely encrypted on the server using AES-256 and used exclusively for sending outbound outreach emails directly from your agency domain.
+          <p className="text-indigo-800 leading-relaxed">
+            Add your Gmail addresses below. When you initiate an email outreach from the Leads table, you will be able to select which Gmail to send from. That selected Gmail will be saved with the lead and locked for all subsequent follow-ups.
           </p>
         </div>
       </div>
 
-      {/* Main SMTP Configuration Card */}
+      {/* Add Gmail Form Card */}
       <div className="p-6 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-5">
         <div className="flex items-center justify-between border-b pb-3">
           <div className="flex items-center gap-2">
-            <Server className="w-4 h-4 text-indigo-600" />
+            <Mail className="w-4 h-4 text-indigo-600" />
             <h4 className="text-sm font-bold text-slate-900">
-              Email / SMTP Server Details
+              Add Sender Gmail
             </h4>
           </div>
-          {smtpConfig.isVerified && (
-            <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>TLS Verified</span>
-            </span>
-          )}
+          <span className="text-xs text-slate-500 font-medium">
+            {senderGmails.length} {senderGmails.length === 1 ? "account" : "accounts"} configured
+          </span>
         </div>
 
-        {/* Host & Port */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="sm:col-span-2">
-            <Input
-              label="SMTP Host *"
-              placeholder="e.g. smtp.sendgrid.net or smtp.gmail.com"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              required
-            />
+        <form onSubmit={handleAdd} className="space-y-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
+            <div className="flex-1">
+              <Input
+                label="Gmail Address *"
+                placeholder="e.g. yourbusiness@gmail.com or sales@agency.com"
+                value={newGmail}
+                onChange={(e) => {
+                  setNewGmail(e.target.value);
+                  if (errorMsg) setErrorMsg("");
+                }}
+                type="email"
+                autoComplete="email"
+              />
+              {errorMsg && (
+                <p className="text-xs text-rose-600 font-medium mt-1">
+                  {errorMsg}
+                </p>
+              )}
+            </div>
+            <Button
+              type="submit"
+              variant="primary"
+              isLoading={isAdding}
+              disabled={isAdding || !newGmail.trim()}
+              leftIcon={<Plus className="w-4 h-4" />}
+              className="h-10 px-5 shrink-0"
+            >
+              Add Gmail
+            </Button>
           </div>
+          <p className="text-[11px] text-slate-400">
+            You can add personal Gmail addresses, Google Workspace emails, or business accounts used for outreach.
+          </p>
+        </form>
+      </div>
 
-          <div>
-            <Input
-              label="SMTP Port *"
-              placeholder="587 or 465"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-              required
-            />
-          </div>
+      {/* Configured Gmails List */}
+      <div className="p-6 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
+        <div className="flex items-center justify-between border-b pb-3">
+          <h4 className="text-sm font-bold text-slate-900">
+            Configured Gmail Addresses
+          </h4>
+          <span className="text-xs font-semibold text-slate-500">
+            Selectable in Leads Email Popup
+          </span>
         </div>
 
-        {/* Username & Password */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="SMTP Username / API Key *"
-            placeholder="e.g. apikey or user@domain.com"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-
-          <div>
-            <Input
-              label="SMTP Password / Secret *"
-              type={showPassword ? "text" : "password"}
-              placeholder={smtpConfig.hasSmtpPassword ? "•••••••••••••••• (Saved)" : "••••••••••••••••"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              rightIcon={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="text-slate-400 hover:text-slate-700 p-1"
-                  title={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              }
-              helperText={smtpConfig.hasSmtpPassword ? "Leave blank to keep existing encrypted password" : undefined}
-            />
-          </div>
-        </div>
-
-        {/* From Name & From Email */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-          <Input
-            label="Sender From Name *"
-            placeholder="e.g. Alex Morgan | Apex Studio"
-            value={fromName}
-            onChange={(e) => setFromName(e.target.value)}
-            required
-          />
-
-          <Input
-            label="Sender From Email *"
-            type="email"
-            placeholder="e.g. alex@apexgrowth.io"
-            value={fromEmail}
-            onChange={(e) => setFromEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        {/* SSL/TLS Toggle */}
-        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
-          <div className="space-y-0.5">
-            <span className="font-bold text-slate-800">Enforce SSL / STARTTLS</span>
-            <p className="text-slate-500 text-[11px]">
-              Encrypt all outgoing socket transmissions with TLS 1.3
+        {senderGmails.length === 0 ? (
+          <div className="p-8 text-center rounded-xl bg-slate-50/70 border border-dashed border-slate-200 space-y-2">
+            <Mail className="w-8 h-8 text-slate-400 mx-auto" />
+            <p className="text-xs font-bold text-slate-700">
+              No Gmail accounts added yet
+            </p>
+            <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+              Add your first sender Gmail address above so you can select it when sending email outreach to leads.
             </p>
           </div>
-          <input
-            type="checkbox"
-            checked={secure}
-            onChange={(e) => setSecure(e.target.checked)}
-            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-          />
-        </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {senderGmails.map((gmail, index) => (
+              <div
+                key={gmail}
+                className="py-3.5 flex items-center justify-between gap-3 group hover:bg-slate-50/50 px-2 rounded-xl transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-100">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {gmail}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.2 rounded-full border border-emerald-100">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Active Sender
+                      </span>
+                      {index === 0 && (
+                        <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.2 rounded-full border border-indigo-100">
+                          Primary Default
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-        {/* Test Result Banner */}
-        {testResult && (
-          <div
-            className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs animate-in fade-in duration-200 ${
-              testResult.success
-                ? "bg-emerald-50 border-emerald-200 text-emerald-950"
-                : "bg-rose-50 border-rose-200 text-rose-950"
-            }`}
-          >
-            {testResult.success ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            ) : (
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            )}
-            <div className="space-y-0.5">
-              <span className="font-bold">
-                {testResult.success ? "Connection Verification Succeeded" : "Connection Failed"}
-              </span>
-              <p className="opacity-90">{testResult.message}</p>
-            </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => deleteSenderGmail(gmail)}
+                  className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  title="Remove Gmail address"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
           </div>
         )}
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
-          <Button
-            type="button"
-            variant="outline"
-            size="md"
-            onClick={handleTestConnection}
-            isLoading={isTesting}
-            leftIcon={<Zap className="w-4 h-4 text-amber-500" />}
-          >
-            Test Configuration
-          </Button>
-
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            isLoading={isSaving}
-            className="font-bold shadow-sm"
-          >
-            Save Configuration
-          </Button>
-        </div>
       </div>
-    </form>
+    </div>
   );
 }
+
+export const GmailSettings = SmtpSettings;

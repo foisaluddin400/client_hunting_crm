@@ -36,6 +36,7 @@ import {
   Phone,
   Sparkles,
   ChevronDown,
+  Check,
   CheckCircle2,
   AlertTriangle,
   XCircle,
@@ -66,6 +67,8 @@ export function LeadDetailsDrawer() {
     followUps,
     runChatGptAudit,
     runAutomaticAudit,
+    senderGmails,
+    updateLeadSenderEmail,
   } = useCRM();
   const { showToast } = useToast();
 
@@ -75,6 +78,37 @@ export function LeadDetailsDrawer() {
   const [activeTab, setActiveTab] = useState<"overview" | "timeline" | "followups" | "notes">("overview");
   const [editableNotes, setEditableNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
+
+  // Sender Gmail editing state
+  const [isEditingSenderGmail, setIsEditingSenderGmail] = useState(false);
+  const [senderGmailInput, setSenderGmailInput] = useState("");
+  const [isSavingSenderGmail, setIsSavingSenderGmail] = useState(false);
+
+  useEffect(() => {
+    if (lead) {
+      setSenderGmailInput(lead.originalSenderEmail || (senderGmails.length > 0 ? senderGmails[0] : ""));
+    }
+  }, [lead, senderGmails]);
+
+  const handleSaveSenderGmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lead) return;
+    const clean = senderGmailInput.trim().toLowerCase();
+    if (!clean) {
+      showToast({
+        type: "error",
+        title: "Error",
+        message: "Please select or enter a Gmail address.",
+      });
+      return;
+    }
+    setIsSavingSenderGmail(true);
+    const success = await updateLeadSenderEmail(lead.id, clean);
+    setIsSavingSenderGmail(false);
+    if (success) {
+      setIsEditingSenderGmail(false);
+    }
+  };
 
   // Activity modal/expand state
   const [expandedActivity, setExpandedActivity] = useState<ActivityItem | null>(null);
@@ -482,6 +516,105 @@ export function LeadDetailsDrawer() {
                     </button>
                   )}
                 </div>
+
+                {/* Sender Gmail Card (Displays which Gmail was used & allows updating ONLY sender Gmail) */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Mail className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-slate-400 font-medium">Outreach Sender Gmail</p>
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        {lead.originalSenderEmail ? (
+                          <span className="text-indigo-700 font-bold">{lead.originalSenderEmail}</span>
+                        ) : (
+                          <span className="text-slate-400 italic">Not set / No email sent yet</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {lead.originalSenderEmail && (
+                      <button
+                        onClick={() => handleCopyField(lead.originalSenderEmail || "", "Sender Gmail")}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        Copy
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setSenderGmailInput(lead.originalSenderEmail || (senderGmails[0] || ""));
+                        setIsEditingSenderGmail(true);
+                      }}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
+                      title="Update ONLY the sender Gmail"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      <span>{lead.originalSenderEmail ? "Update" : "Assign"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Inline Sender Gmail Editor */}
+                {isEditingSenderGmail && (
+                  <form
+                    onSubmit={handleSaveSenderGmail}
+                    className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5 sm:col-span-2 animate-in fade-in duration-150"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Update Selected Sender Gmail (Client Email is untouched)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingSenderGmail(false)}
+                        className="text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="flex-1">
+                        {senderGmails.length > 0 ? (
+                          <select
+                            value={senderGmailInput}
+                            onChange={(e) => setSenderGmailInput(e.target.value)}
+                            className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="">-- Select from configured Gmails --</option>
+                            {senderGmails.map((g) => (
+                              <option key={g} value={g}>
+                                {g}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="email"
+                            value={senderGmailInput}
+                            onChange={(e) => setSenderGmailInput(e.target.value)}
+                            placeholder="e.g. yourbusiness@gmail.com"
+                            className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        )}
+                      </div>
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="sm"
+                        isLoading={isSavingSenderGmail}
+                        leftIcon={<Check className="w-3.5 h-3.5" />}
+                        className="shrink-0 text-xs font-bold"
+                      >
+                        Save Sender Gmail
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Configure additional sender addresses anytime in <strong>Settings → Sender Gmail Accounts</strong>.
+                    </p>
+                  </form>
+                )}
 
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -929,11 +1062,16 @@ export function LeadDetailsDrawer() {
 
                     <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs hover:border-indigo-200 transition-all">
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
                           <ChannelIcon channel={act.channel} size="sm" />
                           <span className="text-xs font-bold text-slate-900 truncate">
                             {act.type}
                           </span>
+                          {act.outreachType && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              {act.outreachType}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <span className="text-[10px] text-slate-400 font-medium">
@@ -951,6 +1089,12 @@ export function LeadDetailsDrawer() {
                           </button>
                         </div>
                       </div>
+
+                      {(act.senderEmail || (act.channel === "email" && lead.originalSenderEmail)) && (
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                          Sent from: <span className="text-indigo-600 font-semibold">{act.senderEmail || lead.originalSenderEmail}</span>
+                        </p>
+                      )}
 
                       {act.messagePreview && (
                         <p className="text-xs text-slate-600 leading-relaxed font-mono bg-slate-50 p-2 rounded-lg mt-2 border border-slate-100">
@@ -1020,7 +1164,7 @@ export function LeadDetailsDrawer() {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={() => openOutreach(lead, fu.channel)}
+                      onClick={() => openOutreach(lead, fu.channel, undefined, true)}
                       leftIcon={<Send className="w-3.5 h-3.5" />}
                     >
                       Outreach

@@ -95,6 +95,8 @@ export const leadCreateSchema = z.object({
   avatarColor: z.string().optional(),
   googleMapsUrl: z.string().optional(),
   link: z.string().optional(),
+  originalSenderEmail: z.string().optional(),
+  originalOutreachType: z.string().optional(),
 });
 
 export const leadUpdateSchema = leadCreateSchema.partial();
@@ -107,6 +109,8 @@ export const outreachCreateSchema = z.object({
   message: z.string().min(1, "Message is required"),
   status: z.string().optional(),
   notes: z.string().optional(),
+  senderEmail: z.string().optional(),
+  outreachType: z.string().optional(),
 });
 
 export const emailSendSchema = z.object({
@@ -158,4 +162,5 @@ export const settingsUpdateSchema = z.object({
   fromEmail: z.string().email().optional().or(z.literal("")),
   secure: z.boolean().optional(),
   websiteAuditPrompt: z.string().optional(),
+  senderGmails: z.array(z.string()).optional(),
 });

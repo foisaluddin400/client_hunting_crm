@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
         businessCategories: userSettings?.businessCategories,
         targetCountries: userSettings?.targetCountries,
         websiteAuditPrompt: userSettings?.websiteAuditPrompt,
+        senderGmails: userSettings?.senderGmails || [],
       },
     });
   } catch (err: any) {

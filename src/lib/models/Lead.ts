@@ -46,6 +46,8 @@ export interface ILead extends Document {
   auditStatus?: "NOT_AUDITED" | "AUDITING" | "COMPLETED" | "FAILED";
   auditScore?: number;
   lastAuditedAt?: Date;
+  originalSenderEmail?: string;
+  originalOutreachType?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -186,6 +188,15 @@ const LeadSchema = new Schema<ILead>(
     },
     lastAuditedAt: {
       type: Date,
+    },
+    originalSenderEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
+    originalOutreachType: {
+      type: String,
+      trim: true,
     },
   },
   {

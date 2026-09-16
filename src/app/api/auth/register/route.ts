@@ -4,6 +4,7 @@ import { User, UserSettings, MessageTemplate } from "@/lib/models";
 import { hashPassword, signToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { registerSchema } from "@/lib/validations/schemas";
 import { DEFAULT_TEMPLATES } from "@/lib/mock-data/templates";
+import { normalizeCategory } from "@/lib/transformers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
     const templateDocs = DEFAULT_TEMPLATES.map((tpl) => ({
       userId: newUser._id,
       name: tpl.name,
-      category: tpl.category.toUpperCase().replace(/\s+/g, "_"),
+      category: normalizeCategory(tpl.category),
       subject: tpl.subject,
       message: tpl.body,
       channels: tpl.channels,

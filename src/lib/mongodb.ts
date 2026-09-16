@@ -33,6 +33,15 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     return cached!.conn;
   }
 
+  try {
+    dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
+    if (dns.setDefaultResultOrder) {
+      dns.setDefaultResultOrder("ipv4first");
+    }
+  } catch (err) {
+    // Fallback if environment restricts setting DNS
+  }
+
   if (!cached!.promise) {
     const opts: mongoose.ConnectOptions = {
       bufferCommands: false,

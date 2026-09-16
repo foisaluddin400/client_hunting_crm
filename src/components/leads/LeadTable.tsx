@@ -499,7 +499,18 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                             <div className="flex items-center justify-center gap-1.5">
                               {/* Email */}
                               {lead.email ? (
-                                <Tooltip content={`Send Email (${lead.email})`}>
+                                <Tooltip
+                                  content={
+                                    lead.originalSenderEmail ? (
+                                      <div className="text-left leading-snug py-0.5 space-y-0.5">
+                                        <div>Client: {lead.email}</div>
+                                        <div className="text-indigo-200 font-semibold">Sent from: {lead.originalSenderEmail}</div>
+                                      </div>
+                                    ) : (
+                                      `Client: ${lead.email}`
+                                    )
+                                  }
+                                >
                                   <button
                                     type="button"
                                     onClick={() => openOutreach(lead, "email")}

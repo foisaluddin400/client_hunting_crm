@@ -35,6 +35,10 @@ export interface ActivityItem {
   fullMessage?: string;
   status: 'Sent' | 'Delivered' | 'Replied' | 'Prepared' | 'Scheduled' | 'Completed';
   author?: string;
+  senderEmail?: string;
+  outreachType?: string;
+  recipient?: string;
+  subject?: string;
 }
 
 export interface Lead {
@@ -66,6 +70,8 @@ export interface Lead {
   notes?: string;
   activities: ActivityItem[];
   avatarColor?: string;
+  originalSenderEmail?: string;
+  originalOutreachType?: string;
 }
 
 export type AuditCheckStatus = "Passed" | "Needs improvement" | "Failed" | "N/A";

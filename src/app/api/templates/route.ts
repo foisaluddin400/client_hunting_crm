@@ -3,7 +3,7 @@ import connectToDatabase from "@/lib/mongodb";
 import { MessageTemplate } from "@/lib/models/MessageTemplate";
 import { getAuthUser } from "@/lib/auth";
 import { templateSchema } from "@/lib/validations/schemas";
-import { transformTemplate } from "@/lib/transformers";
+import { transformTemplate, normalizeCategory } from "@/lib/transformers";
 import { DEFAULT_TEMPLATES } from "@/lib/mock-data/templates";
 
 export async function GET(req: NextRequest) {
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       const defaultDocs = DEFAULT_TEMPLATES.map((tpl) => ({
         userId: authUser.userId,
         name: tpl.name,
-        category: tpl.category.toUpperCase().replace(/\s+/g, "_"),
+        category: normalizeCategory(tpl.category),
         subject: tpl.subject,
         message: tpl.body,
         channels: tpl.channels,
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { name, category, subject, message, channels } = parseResult.data;
-    const catMapped = (category || "GENERAL").toUpperCase().replace(/\s+/g, "_") as any;
+    const catMapped = normalizeCategory(category || "General Introduction");
 
     const newTemplate: any = await MessageTemplate.create({
       userId: authUser.userId,

@@ -6,7 +6,7 @@ import { SmtpSettings } from "@/components/settings/SmtpSettings";
 import { TemplateSettings } from "@/components/settings/TemplateSettings";
 import { SecuritySettings } from "@/components/settings/SecuritySettings";
 import { Tabs } from "@/components/ui/Tabs";
-import { User, Server, FileText, Lock } from "lucide-react";
+import { User, Mail, FileText, Lock } from "lucide-react";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("smtp");
@@ -14,8 +14,8 @@ export default function SettingsPage() {
   const tabs = [
     {
       id: "smtp",
-      label: "Email / SMTP Server",
-      icon: <Server className="w-4 h-4" />,
+      label: "Sender Gmail Accounts",
+      icon: <Mail className="w-4 h-4" />,
     },
     {
       id: "profile",
@@ -44,7 +44,7 @@ export default function SettingsPage() {
           </h2>
         </div>
         <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-          Configure your outbound SMTP credentials, agency profile, security, and default outreach templates
+          Configure your sender Gmail accounts, agency profile, security, and outreach templates
         </p>
       </div>
 

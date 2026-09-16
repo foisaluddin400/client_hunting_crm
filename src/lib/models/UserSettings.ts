@@ -14,6 +14,7 @@ export interface IUserSettings extends Document {
   businessCategories?: string[];
   targetCountries?: string[];
   websiteAuditPrompt?: string;
+  senderGmails?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -74,6 +75,10 @@ const UserSettingsSchema = new Schema<IUserSettings>(
     websiteAuditPrompt: {
       type: String,
       trim: true,
+    },
+    senderGmails: {
+      type: [String],
+      default: [],
     },
   },
   {

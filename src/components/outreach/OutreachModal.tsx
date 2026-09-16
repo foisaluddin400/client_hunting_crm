@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useCRM } from "@/lib/context/crm-context";
 import { useToast } from "@/lib/context/toast-context";
-import { Channel } from "@/lib/types";
+import { Channel, Lead } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { copyToClipboard, replaceTemplateVariables } from "@/lib/utils";
+import { normalizeCategory } from "@/lib/transformers";
 import {
   TwitterXIcon,
   LinkedinIcon,
@@ -19,12 +20,25 @@ import {
   Mail,
   MessageSquare,
   Copy,
+  Check,
   ExternalLink,
   Sparkles,
-  Send,
   Calendar,
   Info,
+  Lock,
+  Tag,
+  Repeat,
 } from "lucide-react";
+
+export const OUTREACH_CATEGORIES = [
+  "No Website",
+  "Website Redesign",
+  "SEO Improvement",
+  "Booking System",
+  "Custom Website",
+  "Mobile App",
+  "General Introduction",
+] as const;
 
 export function OutreachModal() {
   const {
@@ -34,41 +48,91 @@ export function OutreachModal() {
     logActivity,
     updateLead,
     addFollowUp,
-    sendEmailSmtp,
     userProfile,
-    smtpConfig,
+    senderGmails,
   } = useCRM();
   const { showToast } = useToast();
 
-  const { isOpen, lead, channel = "email", defaultMessage = "" } = activeOutreach;
+  const {
+    isOpen,
+    lead,
+    channel = "email",
+    defaultMessage = "",
+    isFollowUp = false,
+  } = activeOutreach;
 
   const [selectedChannel, setSelectedChannel] = useState<Channel>(channel);
+  const [activeCategory, setActiveCategory] = useState<string>("No Website");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedSenderGmail, setSelectedSenderGmail] = useState<string>("");
   const [subject, setSubject] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [scheduleFollowUpDays, setScheduleFollowUpDays] = useState<string>("3");
-  const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Sync state when active outreach opens
+  // Independent copy feedback tracking
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Filter templates for current selection
+  const availableTemplates = useMemo(() => {
+    if (isFollowUp) {
+      return templates.filter((t) => normalizeCategory(t.category) === "Follow-up");
+    }
+    return templates.filter((t) => normalizeCategory(t.category) === activeCategory);
+  }, [templates, isFollowUp, activeCategory]);
+
+  // Sync state when active outreach opens or lead changes
   useEffect(() => {
     if (isOpen && lead) {
       const initChannel = channel || (lead.email ? "email" : "whatsapp");
       setSelectedChannel(initChannel);
 
-      // Pick best matching template based on lead's website status
-      let defaultTplId = "";
-      if (lead.websiteStatus === "No Website") {
-        defaultTplId = "tpl-no-website";
-      } else if (lead.websiteStatus === "Redesign") {
-        defaultTplId = "tpl-redesign";
-      } else if (lead.websiteStatus === "SEO Performance") {
-        defaultTplId = "tpl-seo";
+      // Determine sender Gmail
+      if (isFollowUp) {
+        // Requirement 3: Locked to original first outreach Gmail
+        const originalSender =
+          lead.originalSenderEmail ||
+          senderGmails[0] ||
+          userProfile.email ||
+          "";
+        setSelectedSenderGmail(originalSender);
       } else {
-        defaultTplId = "tpl-general-intro";
+        const defaultSender =
+          lead.originalSenderEmail ||
+          (senderGmails.length > 0 ? senderGmails[0] : userProfile.email || "");
+        setSelectedSenderGmail(defaultSender);
       }
 
-      const tpl = templates.find((t) => t.id === defaultTplId) || templates[0];
+      // Determine active category
+      let initialCategory = "No Website";
+      if (isFollowUp) {
+        // Requirement 6: Display exact original outreach type
+        initialCategory =
+          lead.originalOutreachType ||
+          (lead.websiteStatus === "Redesign"
+            ? "Website Redesign"
+            : lead.websiteStatus === "SEO Performance"
+            ? "SEO Improvement"
+            : "No Website");
+      } else {
+        if (lead.websiteStatus === "No Website") {
+          initialCategory = "No Website";
+        } else if (lead.websiteStatus === "Redesign") {
+          initialCategory = "Website Redesign";
+        } else if (lead.websiteStatus === "SEO Performance") {
+          initialCategory = "SEO Improvement";
+        } else {
+          initialCategory = "General Introduction";
+        }
+      }
+      setActiveCategory(initialCategory);
+
+      // Find matching templates
+      const matchingTemplates = isFollowUp
+        ? templates.filter((t) => normalizeCategory(t.category) === "Follow-up")
+        : templates.filter((t) => normalizeCategory(t.category) === initialCategory);
+
+      const tpl = matchingTemplates[0] || templates[0];
       if (tpl) {
         setSelectedTemplateId(tpl.id);
         const replacedSubject = replaceTemplateVariables(tpl.subject || "", {
@@ -93,10 +157,25 @@ export function OutreachModal() {
         setMessage(defaultMessage || "");
       }
     }
-    setIsCopied(false);
-  }, [isOpen, lead, channel, defaultMessage, templates, userProfile]);
+    setCopiedField(null);
+  }, [isOpen, lead, channel, defaultMessage, isFollowUp, templates, userProfile, senderGmails]);
 
   if (!isOpen || !lead) return null;
+
+  // Handle category change (for 7 outreach categories in non-followup mode)
+  const handleCategoryChange = (newCat: string) => {
+    setActiveCategory(newCat);
+    const catTemplates = templates.filter(
+      (t) => normalizeCategory(t.category) === newCat
+    );
+    const firstTpl = catTemplates[0];
+    if (firstTpl) {
+      setSelectedTemplateId(firstTpl.id);
+      applyTemplate(firstTpl);
+    } else {
+      setSelectedTemplateId("");
+    }
+  };
 
   // Handle template selection change
   const handleTemplateChange = (templateId: string) => {
@@ -105,24 +184,51 @@ export function OutreachModal() {
 
     const tpl = templates.find((t) => t.id === templateId);
     if (tpl) {
-      const replacedSubject = replaceTemplateVariables(tpl.subject || "", {
-        businessName: lead.businessName,
-        ceoName: lead.ceoName,
-        niche: lead.niche,
-        location: lead.location,
-        senderName: userProfile.name,
-        agencyName: userProfile.agencyName,
+      applyTemplate(tpl);
+    }
+  };
+
+  const applyTemplate = (tpl: any) => {
+    const replacedSubject = replaceTemplateVariables(tpl.subject || "", {
+      businessName: lead.businessName,
+      ceoName: lead.ceoName,
+      niche: lead.niche,
+      location: lead.location,
+      senderName: userProfile.name,
+      agencyName: userProfile.agencyName,
+    });
+    const replacedBody = replaceTemplateVariables(tpl.body, {
+      businessName: lead.businessName,
+      ceoName: lead.ceoName,
+      niche: lead.niche,
+      location: lead.location,
+      senderName: userProfile.name,
+      agencyName: userProfile.agencyName,
+    });
+    setSubject(replacedSubject);
+    setMessage(replacedBody);
+  };
+
+  // Dedicated separate clipboard copy handler
+  const handleCopySeparate = async (text: string, fieldId: string, label: string) => {
+    if (!text) {
+      showToast({
+        type: "error",
+        title: "Nothing to Copy",
+        message: `${label} is empty.`,
       });
-      const replacedBody = replaceTemplateVariables(tpl.body, {
-        businessName: lead.businessName,
-        ceoName: lead.ceoName,
-        niche: lead.niche,
-        location: lead.location,
-        senderName: userProfile.name,
-        agencyName: userProfile.agencyName,
+      return;
+    }
+    const success = await copyToClipboard(text);
+    if (success) {
+      setCopiedField(fieldId);
+      setTimeout(() => setCopiedField(null), 2500);
+      showToast({
+        type: "success",
+        title: "Copied Separately",
+        message: `${label} copied to your clipboard.`,
+        duration: 2000,
       });
-      setSubject(replacedSubject);
-      setMessage(replacedBody);
     }
   };
 
@@ -150,7 +256,7 @@ export function OutreachModal() {
     }
   };
 
-  // Channel configuration
+  // Channel configuration for other social/messaging channels
   const channelDetails: Record<
     Channel,
     {
@@ -164,15 +270,13 @@ export function OutreachModal() {
     }
   > = {
     email: {
-      title: "Email Outreach",
+      title: isFollowUp ? "Follow-up Email Outreach" : "Email Outreach",
       icon: <Mail className="w-5 h-5 text-indigo-600" />,
-      recipientLabel: "To (Client Email):",
+      recipientLabel: "To (Client Gmail):",
       recipientValue: lead.email || "No email on file",
-      buttonLabel: "Copy & Open Email App",
-      buttonVariant: "email",
-      actionUrl: `mailto:${lead.email || ""}?subject=${encodeURIComponent(
-        subject
-      )}&body=${encodeURIComponent(message)}`,
+      buttonLabel: "Copy & Save",
+      buttonVariant: "primary",
+      actionUrl: "",
     },
     whatsapp: {
       title: "WhatsApp Outreach",
@@ -234,43 +338,71 @@ export function OutreachModal() {
 
   const currentChannelConfig = channelDetails[selectedChannel];
 
-  // Action 1: Send directly via Server-Side SMTP
-  const handleSendSmtp = async () => {
-    if (!lead.email) {
-      showToast({
-        type: "error",
-        title: "No Email Address",
-        message: "This lead does not have a recipient email address on file.",
-      });
-      return;
-    }
-
+  // Action: Copy & Save for Email (NO external navigation)
+  const handleCopyAndSaveEmail = async () => {
     setIsSubmitting(true);
-    const success = await sendEmailSmtp({
-      leadId: lead.id,
-      recipient: lead.email,
-      subject: subject || "Quick question regarding your web presence",
-      message,
+
+    // Copy message to clipboard automatically as part of Copy & Save
+    await copyToClipboard(message);
+
+    const senderToUse = isFollowUp
+      ? (lead.originalSenderEmail || selectedSenderGmail)
+      : selectedSenderGmail;
+
+    const categoryToUse = isFollowUp
+      ? (lead.originalOutreachType || activeCategory)
+      : activeCategory;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
     });
 
-    if (success) {
-      await maybeScheduleFollowUp();
-      closeOutreach();
+    // Record outreach activity in DB
+    await logActivity(lead.id, {
+      channel: "email",
+      type: isFollowUp ? "Follow-up email prepared" : "Email outreach prepared",
+      date: todayStr,
+      time: timeStr,
+      messagePreview: message.substring(0, 120) + (message.length > 120 ? "..." : ""),
+      fullMessage: message,
+      status: "Prepared",
+      senderEmail: senderToUse,
+      outreachType: categoryToUse,
+    });
+
+    // Update lead original sender email and outreach type if not already set
+    const leadUpdates: Partial<Lead> = {};
+    if (!lead.originalSenderEmail && senderToUse) {
+      leadUpdates.originalSenderEmail = senderToUse;
     }
+    if (!lead.originalOutreachType && categoryToUse) {
+      leadUpdates.originalOutreachType = categoryToUse;
+    }
+    if (Object.keys(leadUpdates).length > 0) {
+      await updateLead(lead.id, leadUpdates);
+    }
+
+    // Schedule follow-up
+    await maybeScheduleFollowUp();
+
+    showToast({
+      type: "success",
+      title: "Copied & Saved! 🚀",
+      message: `Outreach saved with sender ${senderToUse || "default"}. Message copied to clipboard.`,
+      duration: 4000,
+    });
+
     setIsSubmitting(false);
+    closeOutreach();
   };
 
-  // Action 2: Copy message & Open external channel client/URL
-  const handleCopyAndOpen = async () => {
+  // Action for other channels (WhatsApp, LinkedIn, etc.): Copy message & Open external channel client/URL
+  const handleCopyAndOpenOtherChannel = async () => {
     setIsSubmitting(true);
 
-    const fullTextToCopy =
-      selectedChannel === "email" && subject
-        ? `Subject: ${subject}\n\n${message}`
-        : message;
-
-    const copySuccess = await copyToClipboard(fullTextToCopy);
-    setIsCopied(copySuccess);
+    await copyToClipboard(message);
 
     const todayStr = new Date().toISOString().split("T")[0];
     const timeStr = new Date().toLocaleTimeString([], {
@@ -287,17 +419,17 @@ export function OutreachModal() {
       messagePreview: message.substring(0, 120) + (message.length > 120 ? "..." : ""),
       fullMessage: message,
       status: "Prepared",
+      outreachType: activeCategory,
     });
 
     // Schedule follow-up
     await maybeScheduleFollowUp();
 
-    // Show honest toast
     showToast({
       type: "success",
       title: "Message Copied & Activity Saved! 🚀",
-      message: "Message copied and activity saved. Complete sending on the platform.",
-      duration: 5000,
+      message: `Activity saved. Opening ${selectedChannel}...`,
+      duration: 4000,
     });
 
     setIsSubmitting(false);
@@ -318,13 +450,15 @@ export function OutreachModal() {
       title={
         <div className="flex items-center gap-2.5">
           {currentChannelConfig.icon}
-          <span>Outreach Composer — {lead.businessName}</span>
+          <span>
+            {isFollowUp ? "Follow-up Composer" : "Outreach Composer"} — {lead.businessName}
+          </span>
         </div>
       }
       description={`Target contact: ${lead.ceoName || lead.businessName} • ${lead.location}`}
     >
       <div className="space-y-4">
-        {/* Channel Selector Switcher */}
+        {/* Channel Selector Switcher (Hidden if locked in follow-up mode or switchable) */}
         <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/60">
           {(["email", "whatsapp", "linkedin", "instagram", "facebook", "twitter"] as Channel[]).map(
             (ch) => {
@@ -363,65 +497,310 @@ export function OutreachModal() {
           )}
         </div>
 
-        {/* Recipient Box */}
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs font-bold text-slate-500 shrink-0">
-              {currentChannelConfig.recipientLabel}
-            </span>
-            <span className="text-xs font-semibold text-slate-800 truncate select-all">
-              {currentChannelConfig.recipientValue}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[11px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium border border-indigo-100">
-              {lead.websiteStatus}
-            </span>
-          </div>
-        </div>
+        {/* ========================================================= */}
+        {/* EMAIL OUTREACH COMPOSER SECTION                           */}
+        {/* ========================================================= */}
+        {selectedChannel === "email" ? (
+          <div className="space-y-4">
+            {/* Top Row: Client Gmail & Sender Gmail */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 1. Client Gmail Card with dedicated Copy button */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
+                    Client Gmail
+                  </span>
+                  <p className="text-xs font-semibold text-slate-900 truncate select-all">
+                    {lead.email || "No email on file"}
+                  </p>
+                </div>
+                {lead.email && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopySeparate(lead.email || "", "clientEmail", "Client Gmail")}
+                    className={`h-7 px-2.5 text-xs font-semibold shrink-0 transition-colors ${
+                      copiedField === "clientEmail"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                        : ""
+                    }`}
+                    leftIcon={
+                      copiedField === "clientEmail" ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )
+                    }
+                  >
+                    {copiedField === "clientEmail" ? "Copied" : "Copy"}
+                  </Button>
+                )}
+              </div>
 
-        {/* Template Selector */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
-          <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Use Pre-Built Template</span>
-          </label>
-          <div className="w-full sm:w-64">
-            <Select
-              value={selectedTemplateId}
-              onChange={(e) => handleTemplateChange(e.target.value)}
-              className="py-1.5 text-xs bg-indigo-50/40 border-indigo-200"
-            >
-              <option value="">-- Choose a template --</option>
-              {templates.map((tpl) => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.name} ({tpl.category})
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
+              {/* 2. Sender Gmail Card / Select field */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider flex items-center gap-1">
+                    <span>Sender Gmail</span>
+                    {isFollowUp && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-bold">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    )}
+                  </span>
 
-        {/* Email Subject Line (Only if email) */}
-        {selectedChannel === "email" && (
-          <Input
-            label="Subject Line"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="e.g. Quick question regarding your web presence"
-          />
+                  {isFollowUp ? (
+                    <p className="text-xs font-semibold text-slate-900 truncate select-all">
+                      {lead.originalSenderEmail || selectedSenderGmail || "Default Sender"}
+                    </p>
+                  ) : (
+                    <select
+                      value={selectedSenderGmail}
+                      onChange={(e) => setSelectedSenderGmail(e.target.value)}
+                      className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 mt-0.5"
+                    >
+                      {senderGmails.length > 0 ? (
+                        senderGmails.map((g) => (
+                          <option key={g} value={g}>
+                            {g}
+                          </option>
+                        ))
+                      ) : (
+                        <option value={userProfile.email || "default"}>
+                          {userProfile.email || "Add Gmail in Settings"}
+                        </option>
+                      )}
+                    </select>
+                  )}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    handleCopySeparate(
+                      (isFollowUp ? lead.originalSenderEmail : selectedSenderGmail) ||
+                        userProfile.email,
+                      "senderEmail",
+                      "Sender Gmail"
+                    )
+                  }
+                  className={`h-7 px-2.5 text-xs font-semibold shrink-0 transition-colors ${
+                    copiedField === "senderEmail"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                      : ""
+                  }`}
+                  leftIcon={
+                    copiedField === "senderEmail" ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )
+                  }
+                >
+                  {copiedField === "senderEmail" ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Requirement 6: Display Original Outreach Type in Follow-up */}
+            {isFollowUp && (
+              <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50/50 rounded-xl border border-amber-200 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                  <Tag className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Outreach Type:{" "}
+                    <strong className="text-amber-950 font-extrabold underline decoration-amber-300">
+                      {lead.originalOutreachType || activeCategory}
+                    </strong>
+                  </span>
+                </div>
+                <span className="text-[10px] text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full font-bold">
+                  Original Pitch Preserved
+                </span>
+              </div>
+            )}
+
+            {/* Category & Template Selector Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {!isFollowUp ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Outreach Category
+                  </label>
+                  <Select
+                    value={activeCategory}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="py-1.5 text-xs font-semibold bg-white border-slate-300"
+                  >
+                    {OUTREACH_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                    <Repeat className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Follow-up Cadence</span>
+                  </label>
+                  <div className="px-3 py-1.5 bg-amber-50/70 border border-amber-200 rounded-xl text-xs font-semibold text-amber-900">
+                    Follow-up Outreach Templates
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Choose Template</span>
+                </label>
+                <Select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleTemplateChange(e.target.value)}
+                  className="py-1.5 text-xs font-semibold bg-indigo-50/50 border-indigo-200"
+                >
+                  <option value="">-- Choose a template --</option>
+                  {availableTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            {/* Subject Line with Dedicated Copy Button */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">
+                  Subject Line
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCopySeparate(subject, "subject", "Subject Line")}
+                  className={`h-6 px-2 text-[11px] font-semibold transition-colors ${
+                    copiedField === "subject"
+                      ? "text-emerald-700 bg-emerald-50"
+                      : "text-slate-600 hover:text-indigo-600"
+                  }`}
+                  leftIcon={
+                    copiedField === "subject" ? (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )
+                  }
+                >
+                  {copiedField === "subject" ? "Subject Copied" : "Copy Subject"}
+                </Button>
+              </div>
+              <Input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. Quick question regarding your web presence"
+              />
+            </div>
+
+            {/* Message Textarea with Dedicated Copy Button */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">
+                  Outreach Message
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCopySeparate(message, "message", "Message Content")}
+                  className={`h-6 px-2 text-[11px] font-semibold transition-colors ${
+                    copiedField === "message"
+                      ? "text-emerald-700 bg-emerald-50"
+                      : "text-slate-600 hover:text-indigo-600"
+                  }`}
+                  leftIcon={
+                    copiedField === "message" ? (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )
+                  }
+                >
+                  {copiedField === "message" ? "Message Copied" : "Copy Message"}
+                </Button>
+              </div>
+              <Textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={8}
+                placeholder="Write or customize your email outreach message..."
+                className="font-mono text-xs leading-relaxed"
+                helperText="Client Gmail, Subject, and Message each have dedicated separate Copy buttons above."
+              />
+            </div>
+          </div>
+        ) : (
+          /* ========================================================= */
+          /* OTHER CHANNELS (WhatsApp, LinkedIn, Instagram, Facebook) */
+          /* ========================================================= */
+          <div className="space-y-4">
+            {/* Recipient Box */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-bold text-slate-500 shrink-0">
+                  {currentChannelConfig.recipientLabel}
+                </span>
+                <span className="text-xs font-semibold text-slate-800 truncate select-all">
+                  {currentChannelConfig.recipientValue}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[11px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium border border-indigo-100">
+                  {lead.websiteStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* Template Selector for social channels */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Use Pre-Built Template</span>
+              </label>
+              <div className="w-full sm:w-64">
+                <Select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleTemplateChange(e.target.value)}
+                  className="py-1.5 text-xs bg-indigo-50/40 border-indigo-200"
+                >
+                  <option value="">-- Choose a template --</option>
+                  {templates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            {/* Message Textarea */}
+            <Textarea
+              label="Outreach Message"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={8}
+              placeholder="Write or customize your outreach message here..."
+              className="font-mono text-xs leading-relaxed"
+              helperText="Variables like {business_name}, {ceo_name}, and {niche} have been pre-filled."
+            />
+          </div>
         )}
-
-        {/* Message Textarea */}
-        <Textarea
-          label="Outreach Message"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          rows={7}
-          placeholder="Write or customize your outreach message here..."
-          className="font-mono text-xs leading-relaxed"
-          helperText="Variables like {business_name}, {ceo_name}, and {niche} have been pre-filled."
-        />
 
         {/* Follow-up Reminder Schedule */}
         <div className="flex items-center justify-between p-3 bg-amber-50/60 rounded-xl border border-amber-200/80 text-xs">
@@ -448,8 +827,7 @@ export function OutreachModal() {
           <p className="leading-snug">
             {selectedChannel === "email" ? (
               <>
-                You can send directly via your configured{" "}
-                <strong>outbound SMTP server</strong> or copy the message to your local mail client.
+                Clicking <strong>Copy &amp; Save</strong> will copy your message and save this outreach activity (including your selected sender Gmail and outreach category) to the database without navigating to any external mail application.
               </>
             ) : (
               <>
@@ -464,37 +842,26 @@ export function OutreachModal() {
           </p>
         </div>
 
-        {/* Modal Actions */}
+        {/* Modal Actions Footer */}
         <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
           <Button variant="ghost" onClick={closeOutreach} disabled={isSubmitting}>
             Cancel
           </Button>
 
           {selectedChannel === "email" ? (
-            <>
-              <Button
-                variant="outline"
-                onClick={handleCopyAndOpen}
-                isLoading={isSubmitting}
-                leftIcon={<Copy className="w-4 h-4" />}
-                rightIcon={<ExternalLink className="w-3.5 h-3.5 opacity-80" />}
-              >
-                Copy & Open Mail App
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSendSmtp}
-                isLoading={isSubmitting}
-                leftIcon={<Send className="w-4 h-4" />}
-                className="bg-indigo-600 hover:bg-indigo-500 font-bold"
-              >
-                Send via SMTP
-              </Button>
-            </>
+            <Button
+              variant="primary"
+              onClick={handleCopyAndSaveEmail}
+              isLoading={isSubmitting}
+              leftIcon={<Check className="w-4 h-4" />}
+              className="bg-indigo-600 hover:bg-indigo-500 font-bold px-5"
+            >
+              Copy &amp; Save
+            </Button>
           ) : (
             <Button
               variant={currentChannelConfig.buttonVariant}
-              onClick={handleCopyAndOpen}
+              onClick={handleCopyAndOpenOtherChannel}
               isLoading={isSubmitting}
               leftIcon={<Copy className="w-4 h-4" />}
               rightIcon={<ExternalLink className="w-3.5 h-3.5 opacity-80" />}

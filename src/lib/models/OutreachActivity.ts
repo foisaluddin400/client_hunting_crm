@@ -28,6 +28,8 @@ export interface IOutreachActivity extends Document {
   message: string;
   status: DbOutreachStatus;
   notes?: string;
+  senderEmail?: string;
+  outreachType?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +83,15 @@ const OutreachActivitySchema = new Schema<IOutreachActivity>(
       index: true,
     },
     notes: {
+      type: String,
+      trim: true,
+    },
+    senderEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
+    outreachType: {
       type: String,
       trim: true,
     },

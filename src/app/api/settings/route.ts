@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
         isVerified: settings?.isVerified ?? false,
         lastTested: settings?.lastTested,
       },
+      senderGmails: settings?.senderGmails || [],
       websiteAuditPrompt: settings?.websiteAuditPrompt || DEFAULT_WEBSITE_AUDIT_PROMPT,
     });
   } catch (err: any) {
@@ -99,6 +100,9 @@ export async function PATCH(req: NextRequest) {
     if (data.fromEmail !== undefined) smtpUpdates.fromEmail = data.fromEmail.trim();
     if (data.secure !== undefined) smtpUpdates.secure = data.secure;
     if (data.websiteAuditPrompt !== undefined) smtpUpdates.websiteAuditPrompt = data.websiteAuditPrompt.trim();
+    if (data.senderGmails !== undefined) {
+      smtpUpdates.senderGmails = data.senderGmails.map((g: string) => g.toLowerCase().trim()).filter(Boolean);
+    }
 
     // If a new SMTP password is provided, securely encrypt it
     if (data.smtpPassword && data.smtpPassword.trim()) {
@@ -143,6 +147,7 @@ export async function PATCH(req: NextRequest) {
         isVerified: updatedSettings?.isVerified ?? false,
         lastTested: updatedSettings?.lastTested,
       },
+      senderGmails: updatedSettings?.senderGmails || [],
       websiteAuditPrompt: updatedSettings?.websiteAuditPrompt || DEFAULT_WEBSITE_AUDIT_PROMPT,
     });
   } catch (err: any) {

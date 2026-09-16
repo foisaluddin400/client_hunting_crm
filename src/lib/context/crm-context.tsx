@@ -40,6 +40,7 @@ interface ActiveOutreachState {
   lead?: Lead;
   channel?: Channel;
   defaultMessage?: string;
+  isFollowUp?: boolean;
 }
 
 interface ActiveLeadDetailsState {
@@ -149,6 +150,12 @@ interface CRMContextType {
   testSmtpConnection: (config?: Partial<SmtpConfig>) => Promise<boolean>;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
 
+  // Sender Gmail Management
+  senderGmails: string[];
+  addSenderGmail: (email: string) => Promise<boolean>;
+  deleteSenderGmail: (email: string) => Promise<boolean>;
+  updateLeadSenderEmail: (leadId: string, senderEmail: string) => Promise<boolean>;
+
   // Data Refresh
   refreshData: () => Promise<void>;
   refreshStats: () => Promise<void>;
@@ -159,7 +166,7 @@ interface CRMContextType {
   logout: () => Promise<void>;
 
   // Modals Toggles
-  openOutreach: (lead: Lead, channel?: Channel, defaultMessage?: string) => void;
+  openOutreach: (lead: Lead, channel?: Channel, defaultMessage?: string, isFollowUp?: boolean) => void;
   closeOutreach: () => void;
   openLeadDetails: (leadId: string) => void;
   closeLeadDetails: () => void;
@@ -198,6 +205,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     secure: true,
     isVerified: false,
   });
+
+  const [senderGmails, setSenderGmails] = useState<string[]>([]);
 
   const [userProfile, setUserProfile] = useState<UserProfile>({
     name: "Alex Morgan",
@@ -291,6 +300,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
             isVerified: meData.settings.isVerified ?? prev.isVerified,
             lastTested: meData.settings.lastTested,
           }));
+          if (Array.isArray(meData.settings.senderGmails)) {
+            setSenderGmails(meData.settings.senderGmails);
+          }
         }
       } else if (meRes.status === 401) {
         setIsAuthenticated(false);
@@ -592,8 +604,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           leadId,
           channel: activityData.channel,
+          recipient: activityData.recipient,
+          subject: activityData.subject,
           message: activityData.fullMessage || activityData.messagePreview || "Outreach message prepared",
           status: activityData.status ? activityData.status.toUpperCase() : "PREPARED",
+          senderEmail: activityData.senderEmail,
+          outreachType: activityData.outreachType,
         }),
       });
 
@@ -610,6 +626,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
                 ...lead,
                 lastContact: activityData.date,
                 status: lead.status === "New" ? "Contacted" : lead.status,
+                originalSenderEmail: data.lead?.originalSenderEmail || lead.originalSenderEmail || activityData.senderEmail,
+                originalOutreachType: data.lead?.originalOutreachType || lead.originalOutreachType || activityData.outreachType,
                 activities: [data.activity, ...lead.activities],
               };
             }
@@ -1318,8 +1336,115 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     await updateCategories(DEFAULT_BUSINESS_CATEGORIES);
   };
 
+  // Sender Gmail Management Actions
+  const addSenderGmail = async (email: string): Promise<boolean> => {
+    const clean = email.trim().toLowerCase();
+    if (!clean || !clean.includes("@")) {
+      showToast({
+        type: "error",
+        title: "Invalid Email",
+        message: "Please enter a valid Gmail address.",
+      });
+      return false;
+    }
+    if (senderGmails.includes(clean)) {
+      showToast({
+        type: "error",
+        title: "Already Exists",
+        message: "This Gmail address is already in your sender accounts list.",
+      });
+      return false;
+    }
+    const updated = [...senderGmails, clean];
+    setSenderGmails(updated);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderGmails: updated }),
+      });
+      if (!res.ok) throw new Error("Failed to save sender Gmail.");
+      showToast({
+        type: "success",
+        title: "Gmail Added",
+        message: `${clean} is ready to use for outreach.`,
+      });
+      return true;
+    } catch (err: any) {
+      setSenderGmails(senderGmails);
+      showToast({
+        type: "error",
+        title: "Save Failed",
+        message: err.message,
+      });
+      return false;
+    }
+  };
+
+  const deleteSenderGmail = async (email: string): Promise<boolean> => {
+    const updated = senderGmails.filter((g) => g.toLowerCase() !== email.toLowerCase());
+    setSenderGmails(updated);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderGmails: updated }),
+      });
+      if (!res.ok) throw new Error("Failed to delete sender Gmail.");
+      showToast({
+        type: "info",
+        title: "Gmail Removed",
+        message: `${email} removed from your sender list.`,
+      });
+      return true;
+    } catch (err: any) {
+      setSenderGmails(senderGmails);
+      showToast({
+        type: "error",
+        title: "Delete Failed",
+        message: err.message,
+      });
+      return false;
+    }
+  };
+
+  const updateLeadSenderEmail = async (leadId: string, senderEmail: string): Promise<boolean> => {
+    const cleanSender = senderEmail.trim().toLowerCase();
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ originalSenderEmail: cleanSender }),
+      });
+      if (!res.ok) throw new Error("Failed to update sender Gmail.");
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadId ? { ...l, originalSenderEmail: cleanSender } : l
+        )
+      );
+      showToast({
+        type: "success",
+        title: "Sender Gmail Updated",
+        message: `Outreach sender set to ${cleanSender}. Client email was not modified.`,
+      });
+      return true;
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Update Failed",
+        message: err.message,
+      });
+      return false;
+    }
+  };
+
   // Modals
-  const openOutreach = (lead: Lead, channel?: Channel, defaultMessage?: string) => {
+  const openOutreach = (
+    lead: Lead,
+    channel?: Channel,
+    defaultMessage?: string,
+    isFollowUp?: boolean
+  ) => {
     let chosenChannel = channel;
     if (!chosenChannel) {
       if (lead.email) chosenChannel = "email";
@@ -1335,6 +1460,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       lead,
       channel: chosenChannel,
       defaultMessage,
+      isFollowUp: !!isFollowUp,
     });
   };
 
@@ -1425,6 +1551,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         updateSmtpConfig,
         testSmtpConnection,
         updateUserProfile,
+        senderGmails,
+        addSenderGmail,
+        deleteSenderGmail,
+        updateLeadSenderEmail,
         refreshData,
         refreshStats,
         openAuthModal,
