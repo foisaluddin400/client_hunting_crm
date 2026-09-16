@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -15,7 +16,6 @@ import {
   ChevronRight,
   Flame,
   Sparkles,
-  Zap,
   LogOut,
   LogIn,
 } from "lucide-react";
@@ -109,8 +109,15 @@ export function Sidebar({
             onClick={onMobileClose}
             className="flex items-center gap-3 overflow-hidden group"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform shrink-0">
-              <Zap className="w-5 h-5 fill-white text-white" />
+            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center overflow-hidden p-0.5 group-hover:scale-105 transition-transform shrink-0">
+              <Image
+                src="/logo.png"
+                alt="Client Hunting CRM"
+                width={40}
+                height={40}
+                className="w-full h-full object-contain"
+                priority
+              />
             </div>
 
             {!isCollapsed && (
