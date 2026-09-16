@@ -430,6 +430,44 @@ export default function LeadFinderPage() {
     }
   };
 
+  // Batch delete selected businesses from Finder
+  const handleBatchDeleteBusinesses = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    try {
+      const res = await fetch("/api/lead-finder", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast({
+          type: "error",
+          title: "Delete Failed",
+          message: data.error || "Failed to delete selected businesses.",
+        });
+        return;
+      }
+
+      setFinderBusinesses((prev) => prev.filter((b) => !ids.includes(b.id)));
+      await refreshStats();
+
+      showToast({
+        type: "warning",
+        title: "Businesses Deleted",
+        message: data.message || `Deleted ${ids.length} businesses from Lead Finder.`,
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Delete Failed",
+        message: err.message || "Failed to delete selected businesses.",
+      });
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Top Search Card: Find Businesses on Google Maps */}
@@ -551,6 +589,7 @@ export default function LeadFinderPage() {
           onSelectAllEligible={handleSelectAllEligible}
           onEditBusiness={handleOpenEditModal}
           onDeleteBusiness={handleDeleteBusiness}
+          onDeleteSelected={handleBatchDeleteBusinesses}
         />
       </section>
 

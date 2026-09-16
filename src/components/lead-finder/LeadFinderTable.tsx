@@ -47,6 +47,7 @@ interface LeadFinderTableProps {
   onSelectAllEligible: () => void;
   onEditBusiness: (business: LeadFinderBusinessItem) => void;
   onDeleteBusiness: (business: LeadFinderBusinessItem) => void;
+  onDeleteSelected?: (ids: string[]) => Promise<void>;
 }
 
 export function LeadFinderTable({
@@ -57,6 +58,7 @@ export function LeadFinderTable({
   onSelectAllEligible,
   onEditBusiness,
   onDeleteBusiness,
+  onDeleteSelected,
 }: LeadFinderTableProps) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -70,6 +72,7 @@ export function LeadFinderTable({
   const pageSize = 8;
 
   const [duplicateCounts, setDuplicateCounts] = useState<DuplicateContactCounts | null>(null);
+  const [selectedBusinessIds, setSelectedBusinessIds] = useState<string[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -267,6 +270,37 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
   const selectedCount = businesses.filter((b) => b.isSelected).length;
   const eligibleUnselectedCount = businesses.filter((b) => !b.isSelected).length;
 
+  // Multi-select helpers (matching Leads page pattern)
+  const isAllSelected =
+    filteredBusinesses.length > 0 &&
+    filteredBusinesses.every((b) => selectedBusinessIds.includes(b.id));
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      const currentFilteredIds = new Set(filteredBusinesses.map((b) => b.id));
+      setSelectedBusinessIds((prev) => prev.filter((id) => !currentFilteredIds.has(id)));
+    } else {
+      const currentFilteredIds = filteredBusinesses.map((b) => b.id);
+      setSelectedBusinessIds((prev) => Array.from(new Set([...prev, ...currentFilteredIds])));
+    }
+  };
+
+  const toggleSelectBusiness = (id: string) => {
+    setSelectedBusinessIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedBusinessIds.length === 0) return;
+    if (confirm(`Delete ${selectedBusinessIds.length} selected businesses?`)) {
+      if (onDeleteSelected) {
+        await onDeleteSelected(selectedBusinessIds);
+      }
+      setSelectedBusinessIds([]);
+    }
+  };
+
   const formatDateTime = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
@@ -461,12 +495,49 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
         )}
       </div>
 
+      {/* Batch Actions Bar (When items selected - matching Leads page pattern) */}
+      {selectedBusinessIds.length > 0 && (
+        <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 text-indigo-900 font-bold">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]">
+              {selectedBusinessIds.length}
+            </span>
+            <span>Businesses Selected</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleBatchDelete}
+              leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+            >
+              Delete Selected
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Main Table Container */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="p-4 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="text-slate-400 hover:text-slate-700"
+                    aria-label="Select all businesses"
+                  >
+                    {isAllSelected ? (
+                      <CheckSquare className="w-4 h-4 text-indigo-600" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </th>
                 <th className="p-4 w-12 text-center">SI.N</th>
                 <th className="p-4 w-12 text-center">Move</th>
                 <th className="p-4">Business</th>
@@ -484,10 +555,11 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
             <tbody className="divide-y divide-slate-100 text-xs">
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <TableRowSkeleton key={i} columns={11} />
+                  <TableRowSkeleton key={i} columns={12} />
                 ))
               ) : paginatedList.length > 0 ? (
                 paginatedList.map((business, index) => {
+                  const isRowSelected = selectedBusinessIds.includes(business.id);
                   const isChecked = business.isSelected;
                   const isLocked = business.isConnected;
                   const isLead = Boolean(business.isSelected || business.isConnected || business.leadId);
@@ -495,12 +567,30 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                   return (
                     <tr
                       key={business.id}
-                      className={`transition-colors ${
-                        isLead
+                      className={`transition-colors group ${
+                        isRowSelected
+                          ? "bg-indigo-50/40 hover:bg-indigo-50/60"
+                          : isLead
                           ? "bg-emerald-100/60 hover:bg-emerald-100/80 border-l-2 border-emerald-500"
                           : "hover:bg-slate-50/80"
                       }`}
                     >
+                      {/* Selection Checkbox */}
+                      <td className="p-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectBusiness(business.id)}
+                          className="text-slate-400 hover:text-slate-700"
+                          aria-label={`Select ${business.businessName}`}
+                        >
+                          {isRowSelected ? (
+                            <CheckSquare className="w-4 h-4 text-indigo-600" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+
                       {/* Serial Number */}
                       <td className="p-4 text-center font-mono text-slate-500 font-semibold text-xs">
                         {(currentPage - 1) * pageSize + index + 1}
@@ -740,7 +830,10 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                           <Tooltip content="Delete Finder Record (Connected Leads remain protected)">
                             <button
                               type="button"
-                              onClick={() => onDeleteBusiness(business)}
+                              onClick={() => {
+                                setSelectedBusinessIds((prev) => prev.filter((id) => id !== business.id));
+                                onDeleteBusiness(business);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                               aria-label="Delete"
                             >
@@ -754,7 +847,7 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                 })
               ) : (
                 <tr>
-                  <td colSpan={11} className="p-0">
+                  <td colSpan={12} className="p-0">
                     <EmptyState
                       icon={<Compass className="w-6 h-6 text-indigo-600" />}
                       title="No businesses found in Lead Finder"

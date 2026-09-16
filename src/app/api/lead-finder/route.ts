@@ -201,3 +201,46 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+// Bulk delete endpoint: Delete selected Lead Finder business records
+export async function DELETE(req: NextRequest) {
+  try {
+    await connectToDatabase();
+
+    const authUser = await getAuthUser(req);
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = authUser.userId;
+    const body = await req.json();
+    const ids = body?.ids;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { error: "No business IDs provided for deletion" },
+        { status: 400 }
+      );
+    }
+
+    // Only delete from LeadFinderBusiness collection.
+    // Leads collection remains safe and is never deleted.
+    const result = await LeadFinderBusiness.deleteMany({
+      _id: { $in: ids },
+      userId,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Deleted ${result.deletedCount} businesses from Lead Finder. Any connected Leads remain safe in your Leads data.`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (err: any) {
+    console.error("DELETE /api/lead-finder error:", err);
+    return NextResponse.json(
+      { error: "Failed to delete Lead Finder businesses", details: err.message },
+      { status: 500 }
+    );
+  }
+}
+

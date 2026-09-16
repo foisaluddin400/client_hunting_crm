@@ -29,10 +29,20 @@ export async function GET(req: NextRequest) {
     const industry = searchParams.get("industry") || searchParams.get("niche") || "";
     const channel = searchParams.get("channel") || "";
 
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "50", 10)));
     const sortBy = searchParams.get("sortBy") || "createdAt";
     const sortOrder = searchParams.get("sortOrder") === "asc" ? 1 : -1;
+
+    const hasLimitParam = searchParams.has("limit");
+    const limitParamVal = searchParams.get("limit")?.trim().toLowerCase();
+    const isUnlimited =
+      !hasLimitParam ||
+      limitParamVal === "all" ||
+      limitParamVal === "0" ||
+      limitParamVal === "-1";
+
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const requestedLimit = hasLimitParam ? parseInt(limitParamVal || "0", 10) : 0;
+    const limit = !isUnlimited && !isNaN(requestedLimit) && requestedLimit > 0 ? requestedLimit : 0;
 
     // Strict user scoping
     const query: any = { userId: authUser.userId };
@@ -84,11 +94,13 @@ export async function GET(req: NextRequest) {
     }
 
     const total = await Lead.countDocuments(query);
-    const leadsDocs = await Lead.find(query)
-      .sort({ [sortBy]: sortOrder })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean();
+    let leadsFindQuery = Lead.find(query).sort({ [sortBy]: sortOrder });
+
+    if (!isUnlimited && limit > 0) {
+      leadsFindQuery = leadsFindQuery.skip((page - 1) * limit).limit(limit);
+    }
+
+    const leadsDocs = await leadsFindQuery.lean();
 
     // Fetch activities for these leads
     const leadIds = leadsDocs.map((l) => l._id);
@@ -118,9 +130,9 @@ export async function GET(req: NextRequest) {
       success: true,
       leads: transformedLeads,
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit) || 1,
+      page: isUnlimited ? 1 : page,
+      limit: isUnlimited ? total : limit,
+      totalPages: isUnlimited ? 1 : Math.ceil(total / limit) || 1,
     });
   } catch (err: any) {
     console.error("GET /api/leads error:", err);

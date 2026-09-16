@@ -297,7 +297,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 2. Leads
-      const leadsRes = await fetch("/api/leads?limit=100");
+      const leadsRes = await fetch("/api/leads");
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
         if (Array.isArray(leadsData.leads)) {
