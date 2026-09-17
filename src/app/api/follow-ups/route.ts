@@ -17,12 +17,17 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const statusParam = searchParams.get("status") || "all";
     const priorityParam = searchParams.get("priority") || "all";
+    const channelParam = (searchParams.get("channel") || searchParams.get("platform") || "all").toLowerCase();
     const search = searchParams.get("search") || "";
 
     const query: any = { userId: authUser.userId };
 
     if (priorityParam !== "all") {
       query.priority = priorityParam.toUpperCase();
+    }
+
+    if (channelParam !== "all") {
+      query.channel = channelParam;
     }
 
     const followUpsDocs = await FollowUp.find(query)
@@ -60,7 +65,9 @@ export async function GET(req: NextRequest) {
         const matchBiz = item.businessName.toLowerCase().includes(q);
         const matchContact = item.contactPerson.toLowerCase().includes(q);
         const matchNotes = item.notes?.toLowerCase().includes(q);
-        if (!matchBiz && !matchContact && !matchNotes) return false;
+        const matchTemplate = item.templateName?.toLowerCase().includes(q);
+        const matchSubject = item.subject?.toLowerCase().includes(q);
+        if (!matchBiz && !matchContact && !matchNotes && !matchTemplate && !matchSubject) return false;
       }
       return true;
     });
@@ -104,8 +111,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { leadId, channel, message, notes, scheduledAt, dueTime, priority } =
-      parseResult.data;
+    const {
+      leadId,
+      channel,
+      message,
+      notes,
+      scheduledAt,
+      dueTime,
+      priority,
+      intervalDays,
+      currentStep,
+      originalMessageDate,
+      templateCategory,
+      templateName,
+      subject,
+    } = parseResult.data;
 
     const lead = await Lead.findOne({
       _id: leadId,
@@ -119,22 +139,57 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const chLower = (channel || "email").toLowerCase();
     const priorityMapped = ((priority || "medium").toUpperCase() as "HIGH" | "MEDIUM" | "LOW");
+    const schedDate = new Date(scheduledAt);
 
-    const newFollowUp: any = await FollowUp.create({
+    // Upsert or create platform-specific follow-up
+    let followUp = await FollowUp.findOne({
       userId: authUser.userId,
       leadId: lead._id,
-      channel: channel || "email",
-      message: message?.trim() || undefined,
-      notes: notes?.trim() || message?.trim() || undefined,
-      scheduledAt: new Date(scheduledAt),
-      dueTime: dueTime || "10:00 AM",
-      priority: priorityMapped,
-      status: "PENDING",
+      channel: chLower,
+      status: { $ne: "COMPLETED" },
     });
 
+    if (followUp) {
+      followUp.scheduledAt = schedDate;
+      followUp.firstFollowUpScheduledAt = schedDate;
+      followUp.dueTime = dueTime || "10:00 AM";
+      followUp.priority = priorityMapped;
+      followUp.intervalDays = intervalDays || 3;
+      followUp.currentStep = currentStep || 1;
+      if (message) followUp.message = message.trim();
+      if (notes) followUp.notes = notes.trim();
+      if (originalMessageDate) followUp.originalMessageDate = new Date(originalMessageDate);
+      if (templateCategory) followUp.templateCategory = templateCategory.trim();
+      if (templateName) followUp.templateName = templateName.trim();
+      if (subject) followUp.subject = subject.trim();
+      await followUp.save();
+    } else {
+      followUp = await FollowUp.create({
+        userId: authUser.userId,
+        leadId: lead._id,
+        channel: chLower,
+        message: message?.trim() || undefined,
+        notes: notes?.trim() || message?.trim() || undefined,
+        scheduledAt: schedDate,
+        firstFollowUpScheduledAt: schedDate,
+        dueTime: dueTime || "10:00 AM",
+        priority: priorityMapped,
+        status: "PENDING",
+        intervalDays: intervalDays || 3,
+        currentStep: currentStep || 1,
+        originalMessageDate: originalMessageDate ? new Date(originalMessageDate) : new Date(),
+        originalMessagePreview: message?.substring(0, 100) || undefined,
+        templateCategory: templateCategory?.trim() || undefined,
+        templateName: templateName?.trim() || undefined,
+        subject: subject?.trim() || undefined,
+        history: [],
+      });
+    }
+
     const transformed = transformFollowUp(
-      newFollowUp.toObject ? newFollowUp.toObject() : newFollowUp,
+      followUp.toObject ? followUp.toObject() : followUp,
       (lead as any).toObject ? (lead as any).toObject() : lead
     );
 

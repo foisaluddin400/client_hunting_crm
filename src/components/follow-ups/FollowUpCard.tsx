@@ -1,10 +1,12 @@
 "use client";
 
-import React from "react";
-import { Lead, Channel, Priority } from "@/lib/types";
+import React, { useState } from "react";
+import { Lead, Channel, Priority, FollowUpItem, FollowUpHistoryItem } from "@/lib/types";
 import { useCRM } from "@/lib/context/crm-context";
 import { ChannelIcon, PriorityBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { FollowUpDetailsModal } from "./FollowUpDetailsModal";
+import { formatEnglishDate } from "@/lib/transformers";
 import {
   Calendar,
   Clock,
@@ -13,8 +15,13 @@ import {
   CheckCircle2,
   Eye,
   MessageSquare,
-  Sparkles,
-  Layers,
+  Mail,
+  Tag,
+  AlertCircle,
+  Clock3,
+  FileText,
+  Check,
+  RotateCcw,
 } from "lucide-react";
 
 export interface GroupedFollowUpActivity {
@@ -29,36 +36,51 @@ export interface GroupedFollowUpActivity {
 }
 
 export interface GroupedFollowUpLead {
+  groupKey: string;
   leadId: string;
   businessName: string;
   contactPerson: string;
   lead?: Lead;
-  primaryFollowUp: {
-    id: string;
-    dueDate: string;
-    dueTime?: string;
-    channel: Channel;
-    notes?: string;
-    status: string;
-  };
-  followUpItems: Array<{
-    id: string;
-    channel: Channel;
-    dueDate: string;
-    dueTime?: string;
-    status: string;
-    notes?: string;
-  }>;
+  channel: Channel;
+  followUp: FollowUpItem;
+  primaryFollowUp: FollowUpItem;
+  followUpItems: FollowUpItem[];
   activities: GroupedFollowUpActivity[];
   status: "today" | "upcoming" | "overdue" | "completed";
   priority: Priority;
   dueDate: string;
   dueTime?: string;
   completedAt?: string;
+  currentStep: number;
+  intervalDays?: number;
+  templateCategory?: string;
+  templateName?: string;
+  subject?: string;
+  isRescheduled?: boolean;
+  rescheduleNotice?: string;
+  history?: FollowUpHistoryItem[];
+  firstFollowUpScheduledAt?: string;
+  firstFollowUpSentAt?: string;
+  secondFollowUpScheduledAt?: string;
+  secondFollowUpSentAt?: string;
 }
 
 interface FollowUpCardProps {
   item: GroupedFollowUpLead;
+}
+
+function formatCardDateTime(dateInput?: string | Date | null): string {
+  if (!dateInput) return "";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
 }
 
 export function FollowUpCard({ item }: FollowUpCardProps) {
@@ -70,268 +92,353 @@ export function FollowUpCard({ item }: FollowUpCardProps) {
     openReschedule,
   } = useCRM();
 
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
   const lead = item.lead || leads.find((l) => l.id === item.leadId);
 
-  const isCompleted = item.status === "completed";
+  const isCompleted = item.status === "completed" || item.currentStep > 2;
   const isOverdue = item.status === "overdue";
   const isToday = item.status === "today";
 
-  // Primary channel for quick continue outreach
-  const primaryChannel: Channel =
-    item.activities[0]?.channel || item.primaryFollowUp.channel || "email";
+  const fu = item.followUp || item.primaryFollowUp;
+  const channel = item.channel || fu.channel || "email";
 
   const handleContinueOutreach = () => {
     if (lead) {
-      openOutreach(
-        lead,
-        primaryChannel,
-        undefined,
-        true
-      );
+      openOutreach(lead, channel, undefined, true);
     }
   };
 
-  const handleCompleteAll = () => {
-    for (const fu of item.followUpItems) {
-      if (fu.status !== "completed") {
-        completeFollowUp(fu.id);
-      }
+  const handleComplete = () => {
+    if (fu?.id) {
+      completeFollowUp(fu.id);
     }
   };
+
+  // Step 1 status info
+  const step1Sent = Boolean(item.firstFollowUpSentAt);
+  const step1SentFormatted = item.firstFollowUpSentAt
+    ? formatCardDateTime(item.firstFollowUpSentAt)
+    : "";
+
+  // Step 2 status info
+  const step2Sent = Boolean(item.secondFollowUpSentAt);
+  const step2SentFormatted = item.secondFollowUpSentAt
+    ? formatCardDateTime(item.secondFollowUpSentAt)
+    : "";
 
   return (
-    <div
-      className={`p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between group ${
-        isCompleted
-          ? "bg-slate-50/70 border-slate-200/80 opacity-75"
-          : isOverdue
-          ? "bg-white border-rose-200/90 shadow-2xs hover:border-rose-300 hover:shadow-xs"
-          : isToday
-          ? "bg-white border-amber-200/90 shadow-2xs hover:border-amber-300 hover:shadow-xs ring-1 ring-amber-500/10"
-          : "bg-white border-slate-200/80 shadow-2xs hover:border-slate-300 hover:shadow-xs"
-      }`}
-    >
-      <div className="space-y-3.5">
-        {/* Top Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-0.5 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm font-bold text-slate-900 truncate">
-                {item.businessName}
-              </h4>
-              <PriorityBadge priority={item.priority} />
-              {item.activities.length > 1 && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                  <Layers className="w-3 h-3" />
-                  {item.activities.length} Channels
+    <>
+      <div
+        className={`p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between group ${
+          isCompleted
+            ? "bg-slate-50/70 border-slate-200/80 opacity-80"
+            : isOverdue
+            ? "bg-white border-rose-200/90 shadow-2xs hover:border-rose-300 hover:shadow-xs ring-1 ring-rose-500/10"
+            : isToday
+            ? "bg-white border-amber-200/90 shadow-2xs hover:border-amber-300 hover:shadow-xs ring-1 ring-amber-500/15"
+            : "bg-white border-slate-200/80 shadow-2xs hover:border-slate-300 hover:shadow-xs"
+        }`}
+      >
+        <div className="space-y-3.5">
+          {/* Top Header */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-base font-extrabold text-slate-900 truncate tracking-tight">
+                  {item.businessName}
+                </h4>
+                <PriorityBadge priority={item.priority} />
+
+                {/* Platform Badge */}
+                <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700 border border-slate-200/70 capitalize">
+                  <ChannelIcon channel={channel} size="sm" />
+                  {channel}
                 </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 font-medium truncate">
-              Contact:{" "}
-              <span className="text-slate-700 font-semibold">
-                {item.contactPerson}
-              </span>
-            </p>
-          </div>
 
-          {/* Due Status Tag */}
-          <div className="shrink-0 flex items-center gap-1.5">
-            <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                isCompleted
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  : isOverdue
-                  ? "bg-rose-50 text-rose-700 border border-rose-200"
-                  : isToday
-                  ? "bg-amber-50 text-amber-800 border border-amber-200"
-                  : "bg-slate-100 text-slate-700 border border-slate-200"
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>
-                {isCompleted
-                  ? "Completed"
-                  : isToday
-                  ? "Due Today"
-                  : isOverdue
-                  ? "Overdue"
-                  : `Due ${item.dueDate}`}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Grouped Outreach / Follow-ups Section */}
-        <div className="space-y-2">
-          {item.activities.length > 1 ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 px-0.5">
-                <span className="flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Outreach / Follow-ups:</span>
-                </span>
-                <span className="text-[10px] text-slate-400 font-medium">
-                  {item.activities.length} total
-                </span>
-              </div>
-
-              {/* Scrollable list for multi-channel history */}
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {item.activities.map((act) => (
-                  <div
-                    key={act.id}
-                    className="p-3 rounded-xl bg-slate-50/90 border border-slate-100 space-y-1.5 hover:bg-white hover:border-slate-200 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[11px]">
-                      <div className="flex items-center gap-2 font-bold text-slate-800">
-                        <ChannelIcon channel={act.channel} size="sm" />
-                        <span className="capitalize">{act.channel}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {act.date && (
-                          <span className="text-slate-400 font-medium text-[11px]">
-                            Date: {act.date}
-                          </span>
-                        )}
-                        <span
-                          className={`px-2 py-0.5 rounded-md font-semibold text-[10px] ${
-                            act.status === "Completed" ||
-                            act.status === "Delivered" ||
-                            act.status === "Replied"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : act.status === "Sent"
-                              ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                              : "bg-slate-100 text-slate-600 border border-slate-200"
-                          }`}
-                        >
-                          Status: {act.status}
-                        </span>
-                      </div>
-                    </div>
-
-                    {act.messagePreview && (
-                      <p className="text-xs text-slate-600 font-mono line-clamp-2 leading-relaxed">
-                        &quot;{act.messagePreview}&quot;
-                      </p>
-                    )}
-
-                    {act.notes && (
-                      <p className="text-[11px] text-indigo-700 font-sans font-medium pt-1 border-t border-slate-200/60">
-                        Note: {act.notes}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            /* Single activity representation matching original card design */
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-              <div className="flex items-center justify-between gap-2 text-[11px]">
-                <div className="flex items-center gap-2 font-bold text-slate-700">
-                  <ChannelIcon channel={item.activities[0]?.channel || primaryChannel} size="sm" />
-                  <span className="capitalize">
-                    {item.activities[0]?.channel || primaryChannel} Outreach:
+                {/* Cadence Step Badge */}
+                {isCompleted ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    Completed (2/2)
                   </span>
-                </div>
-                {item.activities[0]?.status && (
-                  <span className="px-2 py-0.5 rounded-md font-semibold text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    Status: {item.activities[0].status}
+                ) : item.currentStep === 2 ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    2nd Follow-up
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                    1st Follow-up
                   </span>
                 )}
               </div>
 
-              <p className="text-xs text-slate-600 font-mono line-clamp-2 leading-relaxed">
-                &quot;{item.activities[0]?.messagePreview || item.primaryFollowUp.notes || "Initial outreach sent"}&quot;
+              <p className="text-xs text-slate-500 font-medium truncate">
+                Contact Person:{" "}
+                <span className="text-slate-800 font-semibold">
+                  {item.contactPerson}
+                </span>
               </p>
+            </div>
 
-              {item.activities[0]?.notes && (
-                <p className="text-[11px] text-indigo-700 font-sans font-medium pt-1 border-t border-slate-200/60">
-                  Note: {item.activities[0].notes}
-                </p>
+            {/* Status Pill */}
+            <div className="shrink-0">
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                  isCompleted
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : isOverdue
+                    ? "bg-rose-50 text-rose-700 border border-rose-200"
+                    : isToday
+                    ? "bg-amber-50 text-amber-800 border border-amber-200"
+                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>
+                  {isCompleted
+                    ? "Completed"
+                    : isToday
+                    ? "Due Today"
+                    : isOverdue
+                    ? "Overdue"
+                    : `Due ${item.dueDate}`}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Template Category & Specific Template & Subject Box */}
+          <div className="p-3 rounded-xl bg-slate-50/90 border border-slate-200/80 space-y-2">
+            {/* Template Info Row */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <div className="flex items-center gap-1 text-slate-500 font-medium">
+                <Tag className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Template:</span>
+              </div>
+              <span className="font-bold text-slate-800">
+                {item.templateCategory || "Custom Message"}
+              </span>
+              {item.templateName && item.templateName !== item.templateCategory && (
+                <>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-indigo-700 font-semibold bg-indigo-50 px-2 py-0.5 rounded text-[11px] border border-indigo-100">
+                    {item.templateName}
+                  </span>
+                </>
               )}
             </div>
+
+            {/* Email Subject Row (if applicable) */}
+            {item.subject && (
+              <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-slate-200/60 text-slate-700">
+                <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="text-slate-500 font-medium">Subject:</span>
+                <span className="font-semibold text-slate-900 truncate">
+                  &quot;{item.subject}&quot;
+                </span>
+              </div>
+            )}
+
+            {/* Message Preview */}
+            {(item.activities[0]?.messagePreview || fu?.notes || fu?.originalMessagePreview) && (
+              <p className="text-xs text-slate-600 font-mono line-clamp-2 leading-relaxed pt-1">
+                &quot;
+                {item.activities[0]?.messagePreview ||
+                  fu?.notes ||
+                  fu?.originalMessagePreview ||
+                  "Outreach message sent"}
+                &quot;
+              </p>
+            )}
+          </div>
+
+          {/* Rescheduled Notice Banner */}
+          {item.isRescheduled && (
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/90 text-amber-900 text-xs font-semibold flex items-center gap-2">
+              <Clock3 className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>
+                {item.rescheduleNotice ||
+                  `Rescheduled: Next follow-up adjusted dynamically based on actual send date.`}
+              </span>
+            </div>
           )}
+
+          {/* Cadence Step Tracker (Permanent History View) */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {/* Step 1 Box */}
+            <div
+              className={`p-2.5 rounded-xl border ${
+                step1Sent
+                  ? "bg-emerald-50/50 border-emerald-200/80"
+                  : item.currentStep === 1
+                  ? "bg-amber-50/60 border-amber-200"
+                  : "bg-slate-50 border-slate-100 opacity-60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                  <span>1st Follow-up</span>
+                  {step1Sent ? (
+                    <Check className="w-3 h-3 text-emerald-600" />
+                  ) : null}
+                </span>
+                <span
+                  className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${
+                    step1Sent
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-200/70 text-slate-700"
+                  }`}
+                >
+                  {step1Sent ? "Sent" : "Pending"}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {step1Sent
+                  ? `Sent: ${step1SentFormatted}`
+                  : `Due: ${item.firstFollowUpScheduledAt || item.dueDate}`}
+              </p>
+            </div>
+
+            {/* Step 2 Box */}
+            <div
+              className={`p-2.5 rounded-xl border ${
+                step2Sent
+                  ? "bg-emerald-50/50 border-emerald-200/80"
+                  : item.currentStep === 2
+                  ? "bg-indigo-50/60 border-indigo-200"
+                  : "bg-slate-50 border-slate-100 opacity-60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                  <span>2nd Follow-up</span>
+                  {step2Sent ? (
+                    <Check className="w-3 h-3 text-emerald-600" />
+                  ) : null}
+                </span>
+                <span
+                  className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${
+                    step2Sent
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-200/70 text-slate-700"
+                  }`}
+                >
+                  {step2Sent ? "Sent" : "Pending"}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {step2Sent
+                  ? `Sent: ${step2SentFormatted}`
+                  : item.secondFollowUpScheduledAt
+                  ? `Due: ${item.secondFollowUpScheduledAt}`
+                  : "Pending 1st send"}
+              </p>
+            </div>
+          </div>
+
+          {/* Timestamp Info */}
+          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3 text-slate-400" />
+              <span>
+                Due: {item.dueDate} {item.dueTime ? `at ${item.dueTime}` : ""}
+              </span>
+            </span>
+
+            {item.completedAt && (
+              <span className="text-emerald-600 font-semibold">
+                Completed: {formatCardDateTime(item.completedAt)}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Timestamp Info */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3 text-slate-400" />
-            <span>
-              Due {item.dueDate} {item.dueTime ? `at ${item.dueTime}` : ""}
-            </span>
-          </span>
-
-          {item.completedAt && (
-            <span className="text-emerald-600 font-medium">
-              Done: {item.completedAt}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Action Buttons Footer */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 mt-3 border-t border-slate-100">
-        <div className="flex items-center gap-1">
-          {lead && (
+        {/* Action Buttons Footer */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 mt-3.5 border-t border-slate-100">
+          <div className="flex items-center gap-1">
+            {/* View History / Audit Button */}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => openLeadDetails(lead.id)}
-              leftIcon={<Eye className="w-3.5 h-3.5" />}
-              className="text-xs text-slate-600"
+              onClick={() => setIsDetailsOpen(true)}
+              leftIcon={<FileText className="w-3.5 h-3.5 text-indigo-600" />}
+              className="text-xs text-indigo-700 hover:bg-indigo-50"
             >
-              View Lead
+              Details & History
             </Button>
-          )}
 
-          {!isCompleted && item.primaryFollowUp?.id && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                openReschedule(
-                  item.primaryFollowUp.id,
-                  item.businessName,
-                  item.dueDate
-                )
-              }
-              leftIcon={<CalendarDays className="w-3.5 h-3.5" />}
-              className="text-xs text-slate-600"
-            >
-              Reschedule
-            </Button>
-          )}
-        </div>
+            {lead && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openLeadDetails(lead.id)}
+                leftIcon={<Eye className="w-3.5 h-3.5" />}
+                className="text-xs text-slate-600"
+              >
+                Lead
+              </Button>
+            )}
 
-        <div className="flex items-center gap-2">
-          {!isCompleted && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCompleteAll}
-              leftIcon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-              className="text-xs"
-            >
-              Complete
-            </Button>
-          )}
+            {!isCompleted && fu?.id && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  openReschedule(
+                    fu.id,
+                    item.businessName,
+                    item.dueDate
+                  )
+                }
+                leftIcon={<CalendarDays className="w-3.5 h-3.5" />}
+                className="text-xs text-slate-600"
+              >
+                Reschedule
+              </Button>
+            )}
+          </div>
 
-          {lead && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleContinueOutreach}
-              leftIcon={<Send className="w-3.5 h-3.5" />}
-              className="text-xs font-bold shadow-2xs"
-            >
-              {isCompleted ? "New Outreach" : "Continue Outreach"}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {!isCompleted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleComplete}
+                leftIcon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                className="text-xs hover:border-emerald-300 hover:bg-emerald-50/40"
+              >
+                Complete
+              </Button>
+            )}
+
+            {lead && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleContinueOutreach}
+                leftIcon={<Send className="w-3.5 h-3.5" />}
+                className="text-xs font-bold shadow-2xs"
+              >
+                {isCompleted
+                  ? "New Outreach"
+                  : item.currentStep === 2
+                  ? "Send 2nd Follow-up"
+                  : "Send 1st Follow-up"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Details & Permanent History Audit Modal */}
+      <FollowUpDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        followUp={fu}
+        lead={lead}
+        onContinueOutreach={handleContinueOutreach}
+      />
+    </>
   );
 }

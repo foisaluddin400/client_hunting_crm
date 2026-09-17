@@ -50,6 +50,7 @@ export function OutreachModal() {
     addFollowUp,
     userProfile,
     senderGmails,
+    followUps,
   } = useCRM();
   const { showToast } = useToast();
 
@@ -72,6 +73,45 @@ export function OutreachModal() {
 
   // Independent copy feedback tracking
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Find active follow-up for this lead & channel
+  const activeFollowUp = useMemo(() => {
+    if (!lead) return null;
+    return (
+      followUps.find(
+        (fu) =>
+          fu.leadId === lead.id &&
+          fu.channel === selectedChannel &&
+          fu.status !== "completed"
+      ) || null
+    );
+  }, [followUps, lead, selectedChannel]);
+
+  const followUpNumber: 1 | 2 = useMemo(() => {
+    if (!activeFollowUp) return 1;
+    if (activeFollowUp.firstFollowUpSentAt || activeFollowUp.currentStep === 2) {
+      return 2;
+    }
+    return 1;
+  }, [activeFollowUp]);
+
+  // English forecast for scheduling intervals
+  const reminderForecast = useMemo(() => {
+    if (scheduleFollowUpDays === "none") return null;
+    const days = parseInt(scheduleFollowUpDays, 10);
+    const now = new Date();
+    const d1 = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const d2 = new Date(now.getTime() + days * 2 * 24 * 60 * 60 * 1000);
+    const formatOpts: Intl.DateTimeFormatOptions = {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    };
+    return {
+      firstDate: new Intl.DateTimeFormat("en-US", formatOpts).format(d1),
+      secondDate: new Intl.DateTimeFormat("en-US", formatOpts).format(d2),
+    };
+  }, [scheduleFollowUpDays]);
 
   // Filter templates for current selection
   const availableTemplates = useMemo(() => {
@@ -232,26 +272,34 @@ export function OutreachModal() {
     }
   };
 
-  // Schedule follow-up helper
+  // Schedule follow-up helper for original outreach
   const maybeScheduleFollowUp = async () => {
-    if (scheduleFollowUpDays !== "none") {
+    if (!isFollowUp && scheduleFollowUpDays !== "none") {
       const days = parseInt(scheduleFollowUpDays, 10);
       const followUpDate = new Date();
       followUpDate.setDate(followUpDate.getDate() + days);
       const dueDateStr = followUpDate.toISOString().split("T")[0];
       const todayStr = new Date().toISOString().split("T")[0];
 
+      const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
+
       await addFollowUp({
         leadId: lead.id,
         businessName: lead.businessName,
         contactPerson: lead.ceoName || lead.businessName,
         channel: selectedChannel,
-        originalMessagePreview: message.substring(0, 80) + "...",
+        originalMessagePreview: message.substring(0, 100),
         dueDate: dueDateStr,
         dueTime: "10:00 AM",
         status: "upcoming",
         priority: "medium",
-        notes: `Follow up after ${selectedChannel} outreach on ${todayStr}`,
+        intervalDays: days,
+        currentStep: 1,
+        originalMessageDate: todayStr,
+        templateCategory: activeCategory,
+        templateName: selectedTpl?.name || activeCategory,
+        subject: selectedChannel === "email" ? subject : undefined,
+        notes: `1st Follow-up scheduled (${days}-day interval)`,
       });
     }
   };
@@ -350,8 +398,11 @@ export function OutreachModal() {
       : selectedSenderGmail;
 
     const categoryToUse = isFollowUp
-      ? (lead.originalOutreachType || activeCategory)
+      ? (activeFollowUp?.templateCategory || lead.originalOutreachType || activeCategory)
       : activeCategory;
+
+    const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
+    const templateNameToUse = selectedTpl?.name || (isFollowUp ? activeFollowUp?.templateName : undefined);
 
     const todayStr = new Date().toISOString().split("T")[0];
     const timeStr = new Date().toLocaleTimeString([], {
@@ -362,7 +413,9 @@ export function OutreachModal() {
     // Record outreach activity in DB
     await logActivity(lead.id, {
       channel: "email",
-      type: isFollowUp ? "Follow-up email prepared" : "Email outreach prepared",
+      type: isFollowUp
+        ? `Email ${followUpNumber === 1 ? "1st" : "2nd"} follow-up prepared`
+        : "Email outreach prepared",
       date: todayStr,
       time: timeStr,
       messagePreview: message.substring(0, 120) + (message.length > 120 ? "..." : ""),
@@ -370,6 +423,11 @@ export function OutreachModal() {
       status: "Prepared",
       senderEmail: senderToUse,
       outreachType: categoryToUse,
+      templateCategory: categoryToUse,
+      templateName: templateNameToUse,
+      subject: subject,
+      followUpNumber: isFollowUp ? followUpNumber : undefined,
+      intervalDays: scheduleFollowUpDays !== "none" ? parseInt(scheduleFollowUpDays, 10) : undefined,
     });
 
     // Update lead original sender email and outreach type if not already set
@@ -384,12 +442,16 @@ export function OutreachModal() {
       await updateLead(lead.id, leadUpdates);
     }
 
-    // Schedule follow-up
-    await maybeScheduleFollowUp();
+    // Schedule follow-up if original outreach
+    if (!isFollowUp) {
+      await maybeScheduleFollowUp();
+    }
 
     showToast({
       type: "success",
-      title: "Copied & Saved! 🚀",
+      title: isFollowUp
+        ? `${followUpNumber === 1 ? "1st" : "2nd"} Follow-up Saved! 🚀`
+        : "Copied & Saved! 🚀",
       message: `Outreach saved with sender ${senderToUse || "default"}. Message copied to clipboard.`,
       duration: 4000,
     });
@@ -410,24 +472,40 @@ export function OutreachModal() {
       minute: "2-digit",
     });
 
+    const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
+    const categoryToUse = isFollowUp
+      ? (activeFollowUp?.templateCategory || lead.originalOutreachType || activeCategory)
+      : activeCategory;
+    const templateNameToUse = selectedTpl?.name || (isFollowUp ? activeFollowUp?.templateName : undefined);
+
     // Record activity as PREPARED
     await logActivity(lead.id, {
       channel: selectedChannel,
-      type: `${selectedChannel.charAt(0).toUpperCase() + selectedChannel.slice(1)} outreach prepared`,
+      type: isFollowUp
+        ? `${selectedChannel.charAt(0).toUpperCase() + selectedChannel.slice(1)} ${followUpNumber === 1 ? "1st" : "2nd"} follow-up prepared`
+        : `${selectedChannel.charAt(0).toUpperCase() + selectedChannel.slice(1)} outreach prepared`,
       date: todayStr,
       time: timeStr,
       messagePreview: message.substring(0, 120) + (message.length > 120 ? "..." : ""),
       fullMessage: message,
       status: "Prepared",
-      outreachType: activeCategory,
+      outreachType: categoryToUse,
+      templateCategory: categoryToUse,
+      templateName: templateNameToUse,
+      followUpNumber: isFollowUp ? followUpNumber : undefined,
+      intervalDays: scheduleFollowUpDays !== "none" ? parseInt(scheduleFollowUpDays, 10) : undefined,
     });
 
-    // Schedule follow-up
-    await maybeScheduleFollowUp();
+    // Schedule follow-up if original outreach
+    if (!isFollowUp) {
+      await maybeScheduleFollowUp();
+    }
 
     showToast({
       type: "success",
-      title: "Message Copied & Activity Saved! 🚀",
+      title: isFollowUp
+        ? `${followUpNumber === 1 ? "1st" : "2nd"} Follow-up Saved! 🚀`
+        : "Message Copied & Activity Saved! 🚀",
       message: `Activity saved. Opening ${selectedChannel}...`,
       duration: 4000,
     });
@@ -451,8 +529,16 @@ export function OutreachModal() {
         <div className="flex items-center gap-2.5">
           {currentChannelConfig.icon}
           <span>
-            {isFollowUp ? "Follow-up Composer" : "Outreach Composer"} — {lead.businessName}
+            {isFollowUp
+              ? `${followUpNumber === 1 ? "1st" : "2nd"} Follow-up Composer`
+              : "Outreach Composer"}{" "}
+            — {lead.businessName}
           </span>
+          {isFollowUp && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-200">
+              {followUpNumber === 1 ? "1st Follow-up" : "2nd Follow-up"}
+            </span>
+          )}
         </div>
       }
       description={`Target contact: ${lead.ceoName || lead.businessName} • ${lead.location}`}
@@ -605,21 +691,33 @@ export function OutreachModal() {
               </div>
             </div>
 
-            {/* Requirement 6: Display Original Outreach Type in Follow-up */}
+            {/* Requirement 6 & 9: Display Original Outreach Template & Specific Template */}
             {isFollowUp && (
-              <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50/50 rounded-xl border border-amber-200 flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 text-amber-900 font-semibold">
-                  <Tag className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>
-                    Outreach Type:{" "}
-                    <strong className="text-amber-950 font-extrabold underline decoration-amber-300">
-                      {lead.originalOutreachType || activeCategory}
-                    </strong>
+              <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50/50 rounded-xl border border-amber-200 space-y-1 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                    <Tag className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      Outreach Template:{" "}
+                      <strong className="text-amber-950 font-extrabold">
+                        {activeFollowUp?.templateCategory || lead.originalOutreachType || activeCategory}
+                      </strong>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full font-bold">
+                    {followUpNumber === 1 ? "1st Follow-up" : "2nd Follow-up (Final)"}
                   </span>
                 </div>
-                <span className="text-[10px] text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full font-bold">
-                  Original Pitch Preserved
-                </span>
+                {(activeFollowUp?.templateName || lead.originalOutreachType) && (
+                  <p className="text-[11px] text-amber-800 font-medium pl-6">
+                    Template: <strong>{activeFollowUp?.templateName || lead.originalOutreachType}</strong>
+                  </p>
+                )}
+                {activeFollowUp?.subject && selectedChannel === "email" && (
+                  <p className="text-[11px] text-amber-800 font-medium pl-6">
+                    Email Subject: <strong>{activeFollowUp.subject}</strong>
+                  </p>
+                )}
               </div>
             )}
 
@@ -802,24 +900,54 @@ export function OutreachModal() {
           </div>
         )}
 
-        {/* Follow-up Reminder Schedule */}
-        <div className="flex items-center justify-between p-3 bg-amber-50/60 rounded-xl border border-amber-200/80 text-xs">
-          <div className="flex items-center gap-2 text-amber-900 font-medium">
-            <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>Schedule follow-up reminder if no reply:</span>
+        {/* Follow-up Reminder Schedule (Requirement 2) */}
+        {!isFollowUp ? (
+          <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200/90 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-900 font-medium">
+                <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Schedule follow-up reminder if no reply:</span>
+              </div>
+              <select
+                value={scheduleFollowUpDays}
+                onChange={(e) => setScheduleFollowUpDays(e.target.value)}
+                className="rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs text-amber-900 font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500"
+              >
+                <option value="2">In 2 days</option>
+                <option value="3">In 3 days (Recommended)</option>
+                <option value="5">In 5 days</option>
+                <option value="7">In 1 week</option>
+                <option value="none">Do not schedule</option>
+              </select>
+            </div>
+
+            {reminderForecast && (
+              <div className="pt-1.5 border-t border-amber-200/60 text-[11px] text-amber-950 font-medium space-y-0.5">
+                <p>
+                  👉 <strong>You need to send the 1st follow-up on {reminderForecast.firstDate}.</strong>
+                </p>
+                <p className="text-amber-800">
+                  If the 1st follow-up is sent, the 2nd follow-up will be due on{" "}
+                  <strong>{reminderForecast.secondDate}</strong>.
+                </p>
+              </div>
+            )}
           </div>
-          <select
-            value={scheduleFollowUpDays}
-            onChange={(e) => setScheduleFollowUpDays(e.target.value)}
-            className="rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs text-amber-900 font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500"
-          >
-            <option value="2">In 2 days</option>
-            <option value="3">In 3 days (Recommended)</option>
-            <option value="5">In 5 days</option>
-            <option value="7">In 1 week</option>
-            <option value="none">Do not schedule</option>
-          </select>
-        </div>
+        ) : (
+          /* When in Follow-up mode, show cadence info */
+          <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200/90 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-indigo-900 font-medium">
+              <Repeat className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>
+                Sending <strong>{followUpNumber === 1 ? "1st Follow-up" : "2nd Follow-up"}</strong>
+                {followUpNumber === 2 ? " (Final follow-up in cadence)" : " (Next follow-up calculated from actual send date)"}
+              </span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+              {followUpNumber === 1 ? "Step 1 of 2" : "Step 2 of 2 (Completes)"}
+            </span>
+          </div>
+        )}
 
         {/* Channel Guidance Notice */}
         <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-600 text-xs">

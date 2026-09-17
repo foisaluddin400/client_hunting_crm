@@ -3,7 +3,7 @@ import connectToDatabase from "@/lib/mongodb";
 import { FollowUp, OutreachActivity } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { followUpUpdateSchema } from "@/lib/validations/schemas";
-import { transformFollowUp } from "@/lib/transformers";
+import { transformFollowUp, formatEnglishDate } from "@/lib/transformers";
 
 export async function PATCH(
   req: NextRequest,
@@ -31,14 +31,24 @@ export async function PATCH(
     const data = parseResult.data;
     const updateFields: any = {};
 
-    if (data.channel !== undefined) updateFields.channel = data.channel;
+    if (data.channel !== undefined) updateFields.channel = data.channel.toLowerCase();
     if (data.message !== undefined) updateFields.message = data.message.trim();
     if (data.notes !== undefined) updateFields.notes = data.notes.trim();
     if (data.dueTime !== undefined) updateFields.dueTime = data.dueTime;
     if (data.priority !== undefined) updateFields.priority = data.priority.toUpperCase();
+    if (data.intervalDays !== undefined) updateFields.intervalDays = data.intervalDays;
+    if (data.currentStep !== undefined) updateFields.currentStep = data.currentStep;
+    if (data.templateCategory !== undefined) updateFields.templateCategory = data.templateCategory.trim();
+    if (data.templateName !== undefined) updateFields.templateName = data.templateName.trim();
+    if (data.subject !== undefined) updateFields.subject = data.subject.trim();
 
     if (data.scheduledAt) {
-      updateFields.scheduledAt = new Date(data.scheduledAt);
+      const newSchedDate = new Date(data.scheduledAt);
+      updateFields.scheduledAt = newSchedDate;
+      updateFields.isRescheduled = true;
+      updateFields.rescheduleNotice =
+        data.rescheduleNotice ||
+        `Rescheduled: You need to send the follow-up on ${formatEnglishDate(newSchedDate)}.`;
       if (!data.status) {
         updateFields.status = "PENDING";
       }
@@ -49,6 +59,7 @@ export async function PATCH(
       updateFields.status = st;
       if (st === "COMPLETED") {
         updateFields.completedAt = new Date();
+        updateFields.currentStep = 3;
       }
     }
 
