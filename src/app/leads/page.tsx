@@ -33,6 +33,7 @@ function LeadsContent() {
     location: "",
     channel: "all",
     dateAdded: "",
+    emailVerificationStatus: "all",
   });
 
   const handleFilterChange = (updates: Partial<LeadFiltersState>) => {
@@ -48,6 +49,7 @@ function LeadsContent() {
       location: "",
       channel: "all",
       dateAdded: "",
+      emailVerificationStatus: "all",
     });
   };
 
@@ -135,6 +137,21 @@ function LeadsContent() {
         }
       }
 
+      // Email verification status
+      if (
+        filters.emailVerificationStatus &&
+        filters.emailVerificationStatus !== "all"
+      ) {
+        const evStatus = lead.emailVerification?.status || "not_checked";
+        if (filters.emailVerificationStatus === "disposable") {
+          if (!lead.emailVerification?.disposable) return false;
+        } else if (filters.emailVerificationStatus === "not_checked") {
+          if (evStatus !== "not_checked") return false;
+        } else if (evStatus !== filters.emailVerificationStatus) {
+          return false;
+        }
+      }
+
       return true;
     });
   }, [leads, filters]);
@@ -149,6 +166,7 @@ function LeadsContent() {
     if (filters.location) count++;
     if (filters.channel !== "all") count++;
     if (filters.dateAdded && filters.dateAdded !== "all") count++;
+    if (filters.emailVerificationStatus && filters.emailVerificationStatus !== "all") count++;
     return count;
   }, [filters]);
 

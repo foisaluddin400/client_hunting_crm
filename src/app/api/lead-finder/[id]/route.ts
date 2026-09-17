@@ -65,6 +65,8 @@ export async function PATCH(
               googleMapsUrl: finderDoc.googleMapsUrl || undefined,
               finderBusinessId: finderDoc._id,
               foundAt: finderDoc.foundAt || new Date(),
+              emailVerification: finderDoc.emailVerification || undefined,
+              phoneVerification: finderDoc.phoneVerification || undefined,
             });
           } else {
             linkedLead.businessName = finderDoc.businessName;
@@ -81,6 +83,12 @@ export async function PATCH(
             if (finderDoc.website) {
               linkedLead.website = finderDoc.website;
               linkedLead.websiteStatus = "OTHER";
+            }
+            if (finderDoc.emailVerification && !linkedLead.emailVerification?.checkedAt) {
+              linkedLead.emailVerification = finderDoc.emailVerification;
+            }
+            if (finderDoc.phoneVerification && !linkedLead.phoneVerification?.checkedAt) {
+              linkedLead.phoneVerification = finderDoc.phoneVerification;
             }
             await linkedLead.save();
           }

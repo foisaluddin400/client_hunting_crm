@@ -140,6 +140,25 @@ export function LeadFilters({
             <option value="custom">Custom Range...</option>
           </select>
 
+          {/* Email Verification Filter */}
+          <select
+            value={filters.emailVerificationStatus || "all"}
+            onChange={(e) =>
+              onFilterChange({
+                emailVerificationStatus: e.target.value as any,
+              })
+            }
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
+          >
+            <option value="all">Email: All</option>
+            <option value="not_checked">⚪ Not Checked</option>
+            <option value="valid">🟢 Valid</option>
+            <option value="invalid">🔴 Invalid</option>
+            <option value="risky">🟡 Risky</option>
+            <option value="unknown">🟠 Unknown</option>
+            <option value="disposable">🗑️ Disposable</option>
+          </select>
+
           {/* Toggle Advanced Filters */}
           <Button
             variant={showAdvanced ? "secondary" : "outline"}
@@ -346,6 +365,17 @@ export function LeadFilters({
               Date: {filters.dateAdded === "custom" ? `${filters.customStartDate || "Start"} - ${filters.customEndDate || "End"}` : filters.dateAdded}
               <button
                 onClick={() => onFilterChange({ dateAdded: "all", customStartDate: "", customEndDate: "" })}
+                className="hover:text-indigo-950"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filters.emailVerificationStatus && filters.emailVerificationStatus !== "all" && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-xs text-indigo-800 font-medium capitalize">
+              Email: {filters.emailVerificationStatus.replace("_", " ")}
+              <button
+                onClick={() => onFilterChange({ emailVerificationStatus: "all" })}
                 className="hover:text-indigo-950"
               >
                 <X className="w-3 h-3" />

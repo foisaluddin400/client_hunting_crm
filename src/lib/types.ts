@@ -41,6 +41,50 @@ export interface ActivityItem {
   subject?: string;
 }
 
+export type VerificationStatus =
+  | 'not_checked'
+  | 'valid'
+  | 'invalid'
+  | 'risky'
+  | 'unknown';
+
+export interface EmailVerificationResult {
+  status: VerificationStatus;
+  syntaxValid: boolean;
+  domainExists: boolean | null;
+  mxRecord: boolean | null;
+  mailServer: boolean | null;
+  spf: boolean | null;
+  dmarc: boolean | null;
+  disposable: boolean;
+  freeProvider: boolean;
+  roleBased: boolean;
+  smtpStatus: 'available' | 'inconclusive' | 'rejected' | 'unknown';
+  catchAll: boolean | 'unknown';
+  emailType: 'Business Email' | 'Personal Email' | 'Disposable Email' | 'Invalid';
+  mxRecords?: string[];
+  checkedAt: string;
+  verificationMethod: 'free_local';
+  details?: string;
+}
+
+export interface PhoneVerificationResult {
+  status: VerificationStatus;
+  valid: boolean;
+  possible: boolean;
+  country: string;
+  countryCode: string;
+  regionCode: string;
+  numberType: string;
+  internationalFormat: string;
+  nationalFormat: string;
+  e164Format: string;
+  whatsappStatus: 'yes' | 'no' | 'unknown';
+  checkedAt: string;
+  verificationMethod: 'free_local';
+  details?: string;
+}
+
 export interface Lead {
   id: string;
   businessName: string;
@@ -72,6 +116,8 @@ export interface Lead {
   avatarColor?: string;
   originalSenderEmail?: string;
   originalOutreachType?: string;
+  emailVerification?: EmailVerificationResult;
+  phoneVerification?: PhoneVerificationResult;
 }
 
 export type AuditCheckStatus = "Passed" | "Needs improvement" | "Failed" | "N/A";
@@ -149,6 +195,8 @@ export interface LeadFinderBusinessItem {
   isConnected?: boolean;
   createdAt: string;
   updatedAt: string;
+  emailVerification?: EmailVerificationResult;
+  phoneVerification?: PhoneVerificationResult;
 }
 
 export interface FollowUpItem {
@@ -236,4 +284,12 @@ export interface LeadFiltersState {
   dateAdded: string;
   customStartDate?: string;
   customEndDate?: string;
+  emailVerificationStatus?:
+    | 'all'
+    | 'not_checked'
+    | 'valid'
+    | 'invalid'
+    | 'risky'
+    | 'unknown'
+    | 'disposable';
 }

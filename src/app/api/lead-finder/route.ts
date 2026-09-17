@@ -159,6 +159,8 @@ export async function POST(req: NextRequest) {
             googleMapsUrl: finder.googleMapsUrl || undefined,
             finderBusinessId: finder._id,
             foundAt: finder.foundAt || new Date(),
+            emailVerification: finder.emailVerification || undefined,
+            phoneVerification: finder.phoneVerification || undefined,
           });
         } else {
           targetLead.businessName = finder.businessName;
@@ -175,6 +177,12 @@ export async function POST(req: NextRequest) {
           if (finder.website) {
             targetLead.website = finder.website;
             targetLead.websiteStatus = "OTHER";
+          }
+          if (finder.emailVerification && !targetLead.emailVerification?.checkedAt) {
+            targetLead.emailVerification = finder.emailVerification;
+          }
+          if (finder.phoneVerification && !targetLead.phoneVerification?.checkedAt) {
+            targetLead.phoneVerification = finder.phoneVerification;
           }
           await targetLead.save();
         }

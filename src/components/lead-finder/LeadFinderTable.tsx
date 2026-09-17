@@ -38,6 +38,9 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
+import { VerificationStatusBadge } from "@/components/verification/VerificationStatusBadge";
+import { EmailVerificationModal } from "@/components/verification/EmailVerificationModal";
+import { PhoneVerificationModal } from "@/components/verification/PhoneVerificationModal";
 
 interface LeadFinderTableProps {
   businesses: LeadFinderBusinessItem[];
@@ -48,6 +51,7 @@ interface LeadFinderTableProps {
   onEditBusiness: (business: LeadFinderBusinessItem) => void;
   onDeleteBusiness: (business: LeadFinderBusinessItem) => void;
   onDeleteSelected?: (ids: string[]) => Promise<void>;
+  onVerificationComplete?: () => void;
 }
 
 export function LeadFinderTable({
@@ -59,6 +63,7 @@ export function LeadFinderTable({
   onEditBusiness,
   onDeleteBusiness,
   onDeleteSelected,
+  onVerificationComplete,
 }: LeadFinderTableProps) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -70,6 +75,16 @@ export function LeadFinderTable({
   const [customEndDate, setCustomEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
+
+  const [verifyEmailModal, setVerifyEmailModal] = useState<{
+    isOpen: boolean;
+    business?: LeadFinderBusinessItem | null;
+  }>({ isOpen: false, business: null });
+
+  const [verifyPhoneModal, setVerifyPhoneModal] = useState<{
+    isOpen: boolean;
+    business?: LeadFinderBusinessItem | null;
+  }>({ isOpen: false, business: null });
 
   const [duplicateCounts, setDuplicateCounts] = useState<DuplicateContactCounts | null>(null);
   const [selectedBusinessIds, setSelectedBusinessIds] = useState<string[]>([]);
@@ -679,38 +694,138 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
                           return (
                             <div className="space-y-1 text-xs">
                               {business.phone ? (
-                                <div className="flex items-center gap-1.5 text-slate-700 font-mono text-[11px]">
-                                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                                  <span>{business.phone}</span>
-                                  {phoneDup > 1 && (
-                                    <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
-                                      ({phoneDup})
-                                    </span>
-                                  )}
+                                <div className="group/phone flex items-center justify-between gap-1 text-slate-700 font-mono text-[11px]">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span className="truncate">{business.phone}</span>
+                                    {phoneDup > 1 && (
+                                      <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
+                                        ({phoneDup})
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <VerificationStatusBadge
+                                      status={business.phoneVerification?.status || "not_checked"}
+                                      checkedAt={business.phoneVerification?.checkedAt}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyPhoneModal({
+                                          isOpen: true,
+                                          business,
+                                        });
+                                      }}
+                                      size="xs"
+                                      type="phone"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyPhoneModal({
+                                          isOpen: true,
+                                          business,
+                                        });
+                                      }}
+                                      className="opacity-0 group-hover/phone:opacity-100 transition-opacity text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50/80 hover:bg-indigo-100 px-1 py-0.5 rounded border border-indigo-200 cursor-pointer"
+                                      title={business.phoneVerification?.status ? "Verify Again" : "Verify Phone"}
+                                    >
+                                      {business.phoneVerification?.status && business.phoneVerification.status !== "not_checked"
+                                        ? "Verify Again"
+                                        : "Verify"}
+                                    </button>
+                                  </div>
                                 </div>
                               ) : null}
 
-                              {business.whatsapp ? (
-                                <div className="flex items-center gap-1.5 text-emerald-700 font-mono text-[11px]">
-                                  <MessageSquare className="w-3 h-3 text-emerald-500 shrink-0" />
-                                  <span>{business.whatsapp}</span>
-                                  {whatsappDup > 1 && (
-                                    <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
-                                      ({whatsappDup})
-                                    </span>
-                                  )}
+                              {business.whatsapp && business.whatsapp !== business.phone ? (
+                                <div className="group/whatsapp flex items-center justify-between gap-1 text-emerald-700 font-mono text-[11px]">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <MessageSquare className="w-3 h-3 text-emerald-500 shrink-0" />
+                                    <span className="truncate">{business.whatsapp}</span>
+                                    {whatsappDup > 1 && (
+                                      <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
+                                        ({whatsappDup})
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <VerificationStatusBadge
+                                      status={business.phoneVerification?.status || "not_checked"}
+                                      checkedAt={business.phoneVerification?.checkedAt}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyPhoneModal({
+                                          isOpen: true,
+                                          business,
+                                        });
+                                      }}
+                                      size="xs"
+                                      type="phone"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyPhoneModal({
+                                          isOpen: true,
+                                          business,
+                                        });
+                                      }}
+                                      className="opacity-0 group-hover/whatsapp:opacity-100 transition-opacity text-[10px] font-semibold text-emerald-600 hover:text-emerald-800 bg-emerald-50/80 hover:bg-emerald-100 px-1 py-0.5 rounded border border-emerald-200 cursor-pointer"
+                                    >
+                                      Verify
+                                    </button>
+                                  </div>
                                 </div>
                               ) : null}
 
                               {business.email ? (
-                                <div className="flex items-center gap-1.5 text-slate-700 text-[11px]">
-                                  <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                                  <span className="truncate max-w-[130px]">{business.email}</span>
-                                  {emailDup > 1 && (
-                                    <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
-                                      ({emailDup})
+                                <div className="group/email flex items-center justify-between gap-1 text-slate-700 text-[11px]">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span className="truncate max-w-[120px]" title={business.email}>
+                                      {business.email}
                                     </span>
-                                  )}
+                                    {emailDup > 1 && (
+                                      <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded text-[10px]">
+                                        ({emailDup})
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <VerificationStatusBadge
+                                      status={business.emailVerification?.status || "not_checked"}
+                                      checkedAt={business.emailVerification?.checkedAt}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyEmailModal({
+                                          isOpen: true,
+                                          business,
+                                        });
+                                      }}
+                                      size="xs"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyEmailModal({
+                                          isOpen: true,
+                                          business,
+                                        });
+                                      }}
+                                      className="opacity-0 group-hover/email:opacity-100 transition-opacity text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50/80 hover:bg-indigo-100 px-1 py-0.5 rounded border border-indigo-200 cursor-pointer"
+                                      title={business.emailVerification?.status ? "Verify Again" : "Verify Email"}
+                                    >
+                                      {business.emailVerification?.status && business.emailVerification.status !== "not_checked"
+                                        ? "Verify Again"
+                                        : "Verify"}
+                                    </button>
+                                  </div>
                                 </div>
                               ) : null}
 
@@ -869,6 +984,44 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
           onPageChange={(page) => setCurrentPage(page)}
         />
       </div>
+
+      {/* Email Verification Details Modal */}
+      {verifyEmailModal.business && (
+        <EmailVerificationModal
+          isOpen={verifyEmailModal.isOpen}
+          onClose={() => setVerifyEmailModal({ isOpen: false, business: null })}
+          email={verifyEmailModal.business.email || ""}
+          finderId={verifyEmailModal.business.id}
+          initialResult={verifyEmailModal.business.emailVerification}
+          onVerificationComplete={(res) => {
+            if (verifyEmailModal.business) {
+              verifyEmailModal.business.emailVerification = res;
+            }
+            if (onVerificationComplete) {
+              onVerificationComplete();
+            }
+          }}
+        />
+      )}
+
+      {/* Phone Verification Details Modal */}
+      {verifyPhoneModal.business && (
+        <PhoneVerificationModal
+          isOpen={verifyPhoneModal.isOpen}
+          onClose={() => setVerifyPhoneModal({ isOpen: false, business: null })}
+          phone={verifyPhoneModal.business.phone || verifyPhoneModal.business.whatsapp || ""}
+          finderId={verifyPhoneModal.business.id}
+          initialResult={verifyPhoneModal.business.phoneVerification}
+          onVerificationComplete={(res) => {
+            if (verifyPhoneModal.business) {
+              verifyPhoneModal.business.phoneVerification = res;
+            }
+            if (onVerificationComplete) {
+              onVerificationComplete();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

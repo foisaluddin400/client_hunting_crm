@@ -11,8 +11,11 @@ import {
   WebsiteStatusBadge,
   ChannelIcon,
 } from "@/components/ui/Badge";
-import { LeadStatus, Channel, ActivityItem, WebsiteAuditItem } from "@/lib/types";
+import { LeadStatus, Channel, ActivityItem, WebsiteAuditItem, EmailVerificationResult, PhoneVerificationResult } from "@/lib/types";
 import { AuditDetailsModal } from "./AuditDetailsModal";
+import { VerificationStatusBadge } from "@/components/verification/VerificationStatusBadge";
+import { EmailVerificationModal } from "@/components/verification/EmailVerificationModal";
+import { PhoneVerificationModal } from "@/components/verification/PhoneVerificationModal";
 import {
   TwitterXIcon,
   LinkedinIcon,
@@ -78,6 +81,10 @@ export function LeadDetailsDrawer() {
   const [activeTab, setActiveTab] = useState<"overview" | "timeline" | "followups" | "notes">("overview");
   const [editableNotes, setEditableNotes] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
+
+  // Verification modals state
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
 
   // Sender Gmail editing state
   const [isEditingSenderGmail, setIsEditingSenderGmail] = useState(false);
@@ -501,20 +508,41 @@ export function LeadDetailsDrawer() {
                   <div className="flex items-center gap-2.5 min-w-0">
                     <Mail className="w-4 h-4 text-indigo-600 shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[11px] text-slate-400 font-medium">Email Address</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[11px] text-slate-400 font-medium">Email Address</p>
+                        {lead.email && (
+                          <VerificationStatusBadge
+                            status={lead.emailVerification?.status}
+                            checkedAt={lead.emailVerification?.checkedAt}
+                            size="sm"
+                            type="email"
+                            onClick={() => setEmailModalOpen(true)}
+                          />
+                        )}
+                      </div>
                       <p className="text-xs font-semibold text-slate-800 truncate">
                         {lead.email || "No email available"}
                       </p>
                     </div>
                   </div>
-                  {lead.email && (
-                    <button
-                      onClick={() => handleCopyField(lead.email || "", "Email")}
-                      className="text-xs text-indigo-600 hover:underline shrink-0"
-                    >
-                      Copy
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {lead.email && (
+                      <button
+                        onClick={() => setEmailModalOpen(true)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline font-semibold"
+                      >
+                        {lead.emailVerification ? "Verify Again" : "Verify"}
+                      </button>
+                    )}
+                    {lead.email && (
+                      <button
+                        onClick={() => handleCopyField(lead.email || "", "Email")}
+                        className="text-xs text-slate-500 hover:underline shrink-0"
+                      >
+                        Copy
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Sender Gmail Card (Displays which Gmail was used & allows updating ONLY sender Gmail) */}
@@ -620,22 +648,43 @@ export function LeadDetailsDrawer() {
                   <div className="flex items-center gap-2.5 min-w-0">
                     <MessageSquare className="w-4 h-4 text-emerald-600 shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[11px] text-slate-400 font-medium">WhatsApp / Phone</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[11px] text-slate-400 font-medium">WhatsApp / Phone</p>
+                        {(lead.whatsapp || lead.phone) && (
+                          <VerificationStatusBadge
+                            status={lead.phoneVerification?.status}
+                            checkedAt={lead.phoneVerification?.checkedAt}
+                            size="sm"
+                            type="phone"
+                            onClick={() => setPhoneModalOpen(true)}
+                          />
+                        )}
+                      </div>
                       <p className="text-xs font-semibold text-slate-800 truncate">
                         {lead.whatsapp || lead.phone || "No phone available"}
                       </p>
                     </div>
                   </div>
-                  {(lead.whatsapp || lead.phone) && (
-                    <button
-                      onClick={() =>
-                        handleCopyField(lead.whatsapp || lead.phone || "", "Phone number")
-                      }
-                      className="text-xs text-indigo-600 hover:underline shrink-0"
-                    >
-                      Copy
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {(lead.whatsapp || lead.phone) && (
+                      <button
+                        onClick={() => setPhoneModalOpen(true)}
+                        className="text-xs text-emerald-600 hover:text-emerald-800 hover:underline font-semibold"
+                      >
+                        {lead.phoneVerification ? "Verify Again" : "Verify"}
+                      </button>
+                    )}
+                    {(lead.whatsapp || lead.phone) && (
+                      <button
+                        onClick={() =>
+                          handleCopyField(lead.whatsapp || lead.phone || "", "Phone number")
+                        }
+                        className="text-xs text-slate-500 hover:underline shrink-0"
+                      >
+                        Copy
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
@@ -1244,6 +1293,38 @@ export function LeadDetailsDrawer() {
         onRunChatGpt={handleRunChatGpt}
         isAuditing={isLoadingAudit}
       />
+
+      {/* Email Verification Modal */}
+      {lead.email && (
+        <EmailVerificationModal
+          isOpen={emailModalOpen}
+          onClose={() => setEmailModalOpen(false)}
+          email={lead.email}
+          leadId={lead.id}
+          initialResult={lead.emailVerification}
+          onVerificationComplete={(result) => {
+            updateLead(lead.id, {
+              emailVerification: result,
+            });
+          }}
+        />
+      )}
+
+      {/* Phone Verification Modal */}
+      {(lead.whatsapp || lead.phone) && (
+        <PhoneVerificationModal
+          isOpen={phoneModalOpen}
+          onClose={() => setPhoneModalOpen(false)}
+          phone={lead.whatsapp || lead.phone || ""}
+          leadId={lead.id}
+          initialResult={lead.phoneVerification}
+          onVerificationComplete={(result) => {
+            updateLead(lead.id, {
+              phoneVerification: result,
+            });
+          }}
+        />
+      )}
     </Drawer>
   );
 }

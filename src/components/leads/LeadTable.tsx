@@ -37,8 +37,13 @@ import {
   Square,
   Bot,
   Loader2,
+  MailCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { VerificationStatusBadge } from "@/components/verification/VerificationStatusBadge";
+import { EmailVerificationModal } from "@/components/verification/EmailVerificationModal";
+import { PhoneVerificationModal } from "@/components/verification/PhoneVerificationModal";
+import { BulkEmailVerificationModal } from "@/components/verification/BulkEmailVerificationModal";
 
 interface LeadTableProps {
   leads: Lead[];
@@ -76,11 +81,25 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
     deleteLead,
     runChatGptAudit,
     runAutomaticAudit,
+    refreshData,
   } = useCRM();
 
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
+
+  // Verification modal states
+  const [verifyEmailModal, setVerifyEmailModal] = useState<{
+    isOpen: boolean;
+    lead?: Lead | null;
+  }>({ isOpen: false, lead: null });
+
+  const [verifyPhoneModal, setVerifyPhoneModal] = useState<{
+    isOpen: boolean;
+    lead?: Lead | null;
+  }>({ isOpen: false, lead: null });
+
+  const [bulkVerifyOpen, setBulkVerifyOpen] = useState(false);
 
   const [duplicateCounts, setDuplicateCounts] = useState<DuplicateContactCounts | null>(null);
 
@@ -203,6 +222,16 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkVerifyOpen(true)}
+              leftIcon={<MailCheck className="w-3.5 h-3.5 text-indigo-600" />}
+              className="bg-white font-semibold text-indigo-900 border-indigo-200 hover:bg-indigo-50"
+            >
+              Verify Emails ({selectedLeadIds.length})
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -499,36 +528,52 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
                             <div className="flex items-center justify-center gap-1.5">
                               {/* Email */}
                               {lead.email ? (
-                                <Tooltip
-                                  content={
-                                    lead.originalSenderEmail ? (
-                                      <div className="text-left leading-snug py-0.5 space-y-0.5">
-                                        <div>Client: {lead.email}</div>
-                                        <div className="text-indigo-200 font-semibold">Sent from: {lead.originalSenderEmail}</div>
-                                      </div>
-                                    ) : (
-                                      `Client: ${lead.email}`
-                                    )
-                                  }
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => openOutreach(lead, "email")}
-                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
-                                      isEmailContacted
-                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
-                                        : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border-indigo-200"
-                                    }`}
-                                    aria-label="Send Email"
+                                <div className="relative inline-flex items-center">
+                                  <Tooltip
+                                    content={
+                                      lead.originalSenderEmail ? (
+                                        <div className="text-left leading-snug py-0.5 space-y-0.5">
+                                          <div>Client: {lead.email}</div>
+                                          <div className="text-indigo-200 font-semibold">Sent from: {lead.originalSenderEmail}</div>
+                                        </div>
+                                      ) : (
+                                        `Client: ${lead.email}`
+                                      )
+                                    }
                                   >
-                                    <Mail className="w-3.5 h-3.5" />
-                                    {emailDup > 1 && (
-                                      <span className={`text-[10px] font-bold ${isEmailContacted ? "text-white" : "text-indigo-700"}`}>
-                                        ({emailDup})
-                                      </span>
-                                    )}
-                                  </button>
-                                </Tooltip>
+                                    <button
+                                      type="button"
+                                      onClick={() => openOutreach(lead, "email")}
+                                      className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                        isEmailContacted
+                                          ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                          : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border-indigo-200"
+                                      }`}
+                                      aria-label="Send Email"
+                                    >
+                                      <Mail className="w-3.5 h-3.5" />
+                                      {emailDup > 1 && (
+                                        <span className={`text-[10px] font-bold ${isEmailContacted ? "text-white" : "text-indigo-700"}`}>
+                                          ({emailDup})
+                                        </span>
+                                      )}
+                                    </button>
+                                  </Tooltip>
+                                  <div className="absolute -top-1 -right-1 z-10">
+                                    <VerificationStatusBadge
+                                      status={lead.emailVerification?.status || "not_checked"}
+                                      checkedAt={lead.emailVerification?.checkedAt}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyEmailModal({
+                                          isOpen: true,
+                                          lead,
+                                        });
+                                      }}
+                                      size="xs"
+                                    />
+                                  </div>
+                                </div>
                               ) : (
                                 <span className="p-1.5 text-slate-200 cursor-not-allowed">
                                   <Mail className="w-3.5 h-3.5" />
@@ -537,29 +582,46 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
 
                               {/* WhatsApp */}
                               {lead.whatsapp || lead.phone ? (
-                                <Tooltip
-                                  content={`Open WhatsApp (${
-                                    lead.whatsapp || lead.phone
-                                  })`}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => openOutreach(lead, "whatsapp")}
-                                    className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
-                                      isWhatsAppContacted
-                                        ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
-                                        : "bg-emerald-50 text-emerald-600 hover:bg-[#25D366] hover:text-white border-emerald-200"
-                                    }`}
-                                    aria-label="Open WhatsApp"
+                                <div className="relative inline-flex items-center">
+                                  <Tooltip
+                                    content={`Open WhatsApp (${
+                                      lead.whatsapp || lead.phone
+                                    })`}
                                   >
-                                    <MessageSquare className="w-3.5 h-3.5" />
-                                    {phoneDup > 1 && (
-                                      <span className={`text-[10px] font-bold ${isWhatsAppContacted ? "text-white" : "text-emerald-700"}`}>
-                                        ({phoneDup})
-                                      </span>
-                                    )}
-                                  </button>
-                                </Tooltip>
+                                    <button
+                                      type="button"
+                                      onClick={() => openOutreach(lead, "whatsapp")}
+                                      className={`p-1.5 rounded-lg border transition-all shadow-2xs inline-flex items-center gap-1 ${
+                                        isWhatsAppContacted
+                                          ? "bg-black text-white hover:bg-black/90 hover:text-white border-black"
+                                          : "bg-emerald-50 text-emerald-600 hover:bg-[#25D366] hover:text-white border-emerald-200"
+                                      }`}
+                                      aria-label="Open WhatsApp"
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5" />
+                                      {phoneDup > 1 && (
+                                        <span className={`text-[10px] font-bold ${isWhatsAppContacted ? "text-white" : "text-emerald-700"}`}>
+                                          ({phoneDup})
+                                        </span>
+                                      )}
+                                    </button>
+                                  </Tooltip>
+                                  <div className="absolute -top-1 -right-1 z-10">
+                                    <VerificationStatusBadge
+                                      status={lead.phoneVerification?.status || "not_checked"}
+                                      checkedAt={lead.phoneVerification?.checkedAt}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVerifyPhoneModal({
+                                          isOpen: true,
+                                          lead,
+                                        });
+                                      }}
+                                      size="xs"
+                                      type="phone"
+                                    />
+                                  </div>
+                                </div>
                               ) : (
                                 <span className="p-1.5 text-slate-200 cursor-not-allowed">
                                   <MessageSquare className="w-3.5 h-3.5" />
@@ -798,6 +860,47 @@ export function LeadTable({ leads, isLoading = false }: LeadTableProps) {
           onReAudit={handleReAuditModal}
           onRunChatGpt={handleRunChatGptModal}
           isAuditing={isLoadingAudit}
+        />
+      )}
+
+      {/* Email Verification Details Modal */}
+      {verifyEmailModal.lead && (
+        <EmailVerificationModal
+          isOpen={verifyEmailModal.isOpen}
+          onClose={() => setVerifyEmailModal({ isOpen: false, lead: null })}
+          email={verifyEmailModal.lead.email || ""}
+          leadId={verifyEmailModal.lead.id}
+          initialResult={verifyEmailModal.lead.emailVerification}
+          onVerificationComplete={async () => {
+            await refreshData();
+          }}
+        />
+      )}
+
+      {/* Phone Verification Details Modal */}
+      {verifyPhoneModal.lead && (
+        <PhoneVerificationModal
+          isOpen={verifyPhoneModal.isOpen}
+          onClose={() => setVerifyPhoneModal({ isOpen: false, lead: null })}
+          phone={verifyPhoneModal.lead.whatsapp || verifyPhoneModal.lead.phone || ""}
+          leadId={verifyPhoneModal.lead.id}
+          initialResult={verifyPhoneModal.lead.phoneVerification}
+          onVerificationComplete={async () => {
+            await refreshData();
+          }}
+        />
+      )}
+
+      {/* Bulk Email Verification Modal */}
+      {bulkVerifyOpen && (
+        <BulkEmailVerificationModal
+          isOpen={bulkVerifyOpen}
+          onClose={() => setBulkVerifyOpen(false)}
+          selectedLeadIds={selectedLeadIds}
+          leads={leads}
+          onComplete={async () => {
+            await refreshData();
+          }}
         />
       )}
     </div>

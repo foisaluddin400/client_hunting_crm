@@ -590,6 +590,7 @@ export default function LeadFinderPage() {
           onEditBusiness={handleOpenEditModal}
           onDeleteBusiness={handleDeleteBusiness}
           onDeleteSelected={handleBatchDeleteBusinesses}
+          onVerificationComplete={fetchFinderBusinesses}
         />
       </section>
 

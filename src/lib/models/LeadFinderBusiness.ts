@@ -22,6 +22,41 @@ export interface ILeadFinderBusiness extends Document {
   foundAt: Date;
   isConfirmed: boolean;
   leadId?: Types.ObjectId | null;
+  emailVerification?: {
+    status: "not_checked" | "valid" | "invalid" | "risky" | "unknown";
+    syntaxValid?: boolean;
+    domainExists?: boolean | null;
+    mxRecord?: boolean | null;
+    mailServer?: boolean | null;
+    spf?: boolean | null;
+    dmarc?: boolean | null;
+    disposable?: boolean;
+    freeProvider?: boolean;
+    roleBased?: boolean;
+    smtpStatus?: "available" | "inconclusive" | "rejected" | "unknown";
+    catchAll?: boolean | "unknown";
+    emailType?: string;
+    mxRecords?: string[];
+    checkedAt?: Date;
+    verificationMethod?: string;
+    details?: string;
+  };
+  phoneVerification?: {
+    status: "not_checked" | "valid" | "invalid" | "risky" | "unknown";
+    valid?: boolean;
+    possible?: boolean;
+    country?: string;
+    countryCode?: string;
+    regionCode?: string;
+    numberType?: string;
+    internationalFormat?: string;
+    nationalFormat?: string;
+    e164Format?: string;
+    whatsappStatus?: "yes" | "no" | "unknown";
+    checkedAt?: Date;
+    verificationMethod?: string;
+    details?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -136,6 +171,59 @@ const LeadFinderBusinessSchema = new Schema<ILeadFinderBusiness>(
       ref: "Lead",
       default: null,
       index: true,
+    },
+    emailVerification: {
+      status: {
+        type: String,
+        enum: ["not_checked", "valid", "invalid", "risky", "unknown"],
+        default: "not_checked",
+        index: true,
+      },
+      syntaxValid: { type: Boolean, default: false },
+      domainExists: { type: Boolean, default: null },
+      mxRecord: { type: Boolean, default: null },
+      mailServer: { type: Boolean, default: null },
+      spf: { type: Boolean, default: null },
+      dmarc: { type: Boolean, default: null },
+      disposable: { type: Boolean, default: false },
+      freeProvider: { type: Boolean, default: false },
+      roleBased: { type: Boolean, default: false },
+      smtpStatus: {
+        type: String,
+        enum: ["available", "inconclusive", "rejected", "unknown"],
+        default: "unknown",
+      },
+      catchAll: { type: Schema.Types.Mixed, default: "unknown" },
+      emailType: { type: String, default: "Business Email" },
+      mxRecords: [{ type: String }],
+      checkedAt: { type: Date },
+      verificationMethod: { type: String, default: "free_local" },
+      details: { type: String },
+    },
+    phoneVerification: {
+      status: {
+        type: String,
+        enum: ["not_checked", "valid", "invalid", "risky", "unknown"],
+        default: "not_checked",
+        index: true,
+      },
+      valid: { type: Boolean, default: false },
+      possible: { type: Boolean, default: false },
+      country: { type: String, default: "Unknown" },
+      countryCode: { type: String, default: "" },
+      regionCode: { type: String, default: "" },
+      numberType: { type: String, default: "Unknown" },
+      internationalFormat: { type: String },
+      nationalFormat: { type: String },
+      e164Format: { type: String },
+      whatsappStatus: {
+        type: String,
+        enum: ["yes", "no", "unknown"],
+        default: "unknown",
+      },
+      checkedAt: { type: Date },
+      verificationMethod: { type: String, default: "free_local" },
+      details: { type: String },
     },
   },
   {

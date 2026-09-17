@@ -7,11 +7,56 @@ import {
   LeadStatus,
   Channel,
   LeadFinderBusinessItem,
+  EmailVerificationResult,
+  PhoneVerificationResult,
 } from "./types";
 import { ILead, DbWebsiteStatus, DbLeadStatus } from "./models/Lead";
 import { IFollowUp } from "./models/FollowUp";
 import { IOutreachActivity } from "./models/OutreachActivity";
 import { IMessageTemplate } from "./models/MessageTemplate";
+
+export function mapEmailVerification(ev?: any): EmailVerificationResult | undefined {
+  if (!ev || !ev.status) return undefined;
+  return {
+    status: ev.status,
+    syntaxValid: Boolean(ev.syntaxValid),
+    domainExists: ev.domainExists ?? null,
+    mxRecord: ev.mxRecord ?? null,
+    mailServer: ev.mailServer ?? null,
+    spf: ev.spf ?? null,
+    dmarc: ev.dmarc ?? null,
+    disposable: Boolean(ev.disposable),
+    freeProvider: Boolean(ev.freeProvider),
+    roleBased: Boolean(ev.roleBased),
+    smtpStatus: ev.smtpStatus || "unknown",
+    catchAll: ev.catchAll ?? "unknown",
+    emailType: ev.emailType || "Business Email",
+    mxRecords: Array.isArray(ev.mxRecords) ? ev.mxRecords : [],
+    checkedAt: ev.checkedAt ? new Date(ev.checkedAt).toISOString() : new Date().toISOString(),
+    verificationMethod: ev.verificationMethod || "free_local",
+    details: ev.details || undefined,
+  };
+}
+
+export function mapPhoneVerification(pv?: any): PhoneVerificationResult | undefined {
+  if (!pv || !pv.status) return undefined;
+  return {
+    status: pv.status,
+    valid: Boolean(pv.valid),
+    possible: Boolean(pv.possible),
+    country: pv.country || "Unknown",
+    countryCode: pv.countryCode || "",
+    regionCode: pv.regionCode || "",
+    numberType: pv.numberType || "Unknown",
+    internationalFormat: pv.internationalFormat || "",
+    nationalFormat: pv.nationalFormat || "",
+    e164Format: pv.e164Format || "",
+    whatsappStatus: pv.whatsappStatus || "unknown",
+    checkedAt: pv.checkedAt ? new Date(pv.checkedAt).toISOString() : new Date().toISOString(),
+    verificationMethod: pv.verificationMethod || "free_local",
+    details: pv.details || undefined,
+  };
+}
 
 // Map frontend WebsiteStatus to DB enum
 export function toDbWebsiteStatus(status?: string): DbWebsiteStatus {
@@ -192,6 +237,8 @@ export function transformLead(
     originalSenderEmail: doc.originalSenderEmail || undefined,
     originalOutreachType: doc.originalOutreachType || undefined,
     activities: activities.map((a) => transformActivity(a)),
+    emailVerification: mapEmailVerification(doc.emailVerification || (doc.finderBusinessId as any)?.emailVerification),
+    phoneVerification: mapPhoneVerification(doc.phoneVerification || (doc.finderBusinessId as any)?.phoneVerification),
   };
 }
 
@@ -240,6 +287,8 @@ export function transformLeadFinderBusiness(
     isConnected: Boolean(isLeadConnected),
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
+    emailVerification: mapEmailVerification(doc.emailVerification || (doc.leadId as any)?.emailVerification),
+    phoneVerification: mapPhoneVerification(doc.phoneVerification || (doc.leadId as any)?.phoneVerification),
   };
 }
 
