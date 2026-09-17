@@ -610,6 +610,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           status: activityData.status ? activityData.status.toUpperCase() : "PREPARED",
           senderEmail: activityData.senderEmail,
           outreachType: activityData.outreachType,
+          templateCategory: activityData.templateCategory || activityData.outreachType,
+          templateName: activityData.templateName,
+          followUpNumber: activityData.followUpNumber,
+          intervalDays: activityData.intervalDays,
         }),
       });
 
@@ -635,6 +639,21 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           })
         );
       }
+
+      if (activityData.followUpNumber) {
+        try {
+          const fuRes = await fetch("/api/follow-ups");
+          if (fuRes.ok) {
+            const fuData = await fuRes.json();
+            if (Array.isArray(fuData.followUps)) {
+              setFollowUps(fuData.followUps);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to refresh follow-ups after activity:", e);
+        }
+      }
+
       refreshStats();
     } catch (err: any) {
       console.error("Failed to log activity:", err);
@@ -749,6 +768,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           scheduledAt: item.dueDate,
           dueTime: item.dueTime,
           priority: item.priority,
+          intervalDays: item.intervalDays,
+          currentStep: item.currentStep,
+          originalMessageDate: item.originalMessageDate,
+          templateCategory: item.templateCategory,
+          templateName: item.templateName,
+          subject: item.subject,
         }),
       });
 
@@ -758,7 +783,13 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.followUp) {
-        setFollowUps((prev) => [data.followUp, ...prev]);
+        setFollowUps((prev) => {
+          const exists = prev.some((fu) => fu.id === data.followUp.id);
+          if (exists) {
+            return prev.map((fu) => (fu.id === data.followUp.id ? data.followUp : fu));
+          }
+          return [data.followUp, ...prev];
+        });
       }
       refreshStats();
 

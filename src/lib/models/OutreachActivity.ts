@@ -30,6 +30,10 @@ export interface IOutreachActivity extends Document {
   notes?: string;
   senderEmail?: string;
   outreachType?: string;
+  templateCategory?: string;
+  templateName?: string;
+  followUpNumber?: number;
+  intervalDays?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -94,6 +98,20 @@ const OutreachActivitySchema = new Schema<IOutreachActivity>(
     outreachType: {
       type: String,
       trim: true,
+    },
+    templateCategory: {
+      type: String,
+      trim: true,
+    },
+    templateName: {
+      type: String,
+      trim: true,
+    },
+    followUpNumber: {
+      type: Number,
+    },
+    intervalDays: {
+      type: Number,
     },
   },
   {

@@ -292,6 +292,18 @@ export function transformLeadFinderBusiness(
   };
 }
 
+// Helper to format date in clean English: "September 20, 2026"
+export function formatEnglishDate(dateInput?: Date | string | null): string {
+  if (!dateInput) return "";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+}
+
 // Transform OutreachActivity DB document to frontend ActivityItem
 export function transformActivity(doc: IOutreachActivity | any): ActivityItem {
   const dateStr = doc.createdAt
@@ -332,12 +344,15 @@ export function transformActivity(doc: IOutreachActivity | any): ActivityItem {
 
   const channelTitle =
     channelMapped.charAt(0).toUpperCase() + channelMapped.slice(1);
-  const typeText =
-    statusMapped === "Sent"
-      ? `${channelTitle} outreach sent`
-      : statusMapped === "Prepared"
-      ? `${channelTitle} message prepared`
-      : doc.notes || `${channelTitle} activity`;
+  
+  let typeText = doc.notes || `${channelTitle} activity`;
+  if (doc.followUpNumber) {
+    typeText = `${channelTitle} ${doc.followUpNumber === 1 ? "1st" : "2nd"} follow-up ${statusMapped === "Sent" ? "sent" : "prepared"}`;
+  } else if (statusMapped === "Sent") {
+    typeText = `${channelTitle} outreach sent`;
+  } else if (statusMapped === "Prepared") {
+    typeText = `${channelTitle} message prepared`;
+  }
 
   return {
     id: doc._id ? doc._id.toString() : doc.id,
@@ -352,6 +367,12 @@ export function transformActivity(doc: IOutreachActivity | any): ActivityItem {
     status: statusMapped,
     senderEmail: doc.senderEmail || undefined,
     outreachType: doc.outreachType || undefined,
+    templateCategory: doc.templateCategory || doc.outreachType || undefined,
+    templateName: doc.templateName || undefined,
+    recipient: doc.recipient || undefined,
+    subject: doc.subject || undefined,
+    followUpNumber: doc.followUpNumber || undefined,
+    intervalDays: doc.intervalDays || undefined,
   };
 }
 
@@ -370,8 +391,10 @@ export function transformFollowUp(
   const dueDateStr = schedDate.toISOString().split("T")[0];
   const todayStr = today.toISOString().split("T")[0];
 
+  const currentStep = doc.currentStep ?? 1;
+
   let calculatedStatus: "today" | "upcoming" | "overdue" | "completed" = "upcoming";
-  if (doc.status === "COMPLETED" || doc.completedAt) {
+  if (doc.status === "COMPLETED" || doc.completedAt || currentStep > 2) {
     calculatedStatus = "completed";
   } else if (dueDateStr === todayStr) {
     calculatedStatus = "today";
@@ -389,13 +412,36 @@ export function transformFollowUp(
   const leadName = lead ? lead.businessName : doc.leadId?.businessName || "Unknown Lead";
   const contactName = lead ? lead.ceoName || lead.businessName : doc.leadId?.ceoName || leadName;
 
+  // History mapping
+  const mappedHistory = Array.isArray(doc.history)
+    ? doc.history.map((h: any) => ({
+        id: h._id ? h._id.toString() : undefined,
+        followUpNumber: h.followUpNumber || 1,
+        scheduledDate: h.scheduledDate,
+        sentAt: h.sentAt ? new Date(h.sentAt).toISOString() : undefined,
+        sentDate: h.sentDate,
+        channel: ((h.channel || doc.channel || "email").toLowerCase() as Channel) || "email",
+        templateCategory: h.templateCategory,
+        templateName: h.templateName,
+        subject: h.subject,
+        messagePreview: h.messagePreview,
+        notes: h.notes,
+      }))
+    : [];
+
+  // Generate dynamic reschedule notice if needed
+  let rescheduleNotice = doc.rescheduleNotice;
+  if (!rescheduleNotice && doc.isRescheduled && currentStep === 2 && schedDate) {
+    rescheduleNotice = `Rescheduled: You need to send the 2nd follow-up on ${formatEnglishDate(schedDate)}.`;
+  }
+
   return {
     id: doc._id ? doc._id.toString() : doc.id,
     leadId: doc.leadId?._id ? doc.leadId._id.toString() : doc.leadId ? doc.leadId.toString() : "",
     businessName: leadName,
     contactPerson: contactName,
     channel: ((doc.channel || "email").toLowerCase() as Channel) || "email",
-    originalMessagePreview: doc.message || doc.notes || "Follow-up scheduled",
+    originalMessagePreview: doc.originalMessagePreview || doc.message || doc.notes || "Follow-up scheduled",
     dueDate: dueDateStr,
     dueTime: doc.dueTime || "10:00 AM",
     status: calculatedStatus,
@@ -404,6 +450,29 @@ export function transformFollowUp(
     completedAt: doc.completedAt
       ? new Date(doc.completedAt).toISOString().split("T")[0]
       : undefined,
+    intervalDays: doc.intervalDays ?? 3,
+    currentStep: currentStep,
+    originalMessageDate: doc.originalMessageDate
+      ? new Date(doc.originalMessageDate).toISOString().split("T")[0]
+      : undefined,
+    templateCategory: doc.templateCategory || undefined,
+    templateName: doc.templateName || undefined,
+    subject: doc.subject || undefined,
+    firstFollowUpScheduledAt: doc.firstFollowUpScheduledAt
+      ? new Date(doc.firstFollowUpScheduledAt).toISOString().split("T")[0]
+      : undefined,
+    firstFollowUpSentAt: doc.firstFollowUpSentAt
+      ? new Date(doc.firstFollowUpSentAt).toISOString()
+      : undefined,
+    secondFollowUpScheduledAt: doc.secondFollowUpScheduledAt
+      ? new Date(doc.secondFollowUpScheduledAt).toISOString().split("T")[0]
+      : undefined,
+    secondFollowUpSentAt: doc.secondFollowUpSentAt
+      ? new Date(doc.secondFollowUpSentAt).toISOString()
+      : undefined,
+    isRescheduled: Boolean(doc.isRescheduled),
+    rescheduleNotice: rescheduleNotice || undefined,
+    history: mappedHistory,
   };
 }
 

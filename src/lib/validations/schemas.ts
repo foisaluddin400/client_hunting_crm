@@ -111,6 +111,10 @@ export const outreachCreateSchema = z.object({
   notes: z.string().optional(),
   senderEmail: z.string().optional(),
   outreachType: z.string().optional(),
+  templateCategory: z.string().optional(),
+  templateName: z.string().optional(),
+  followUpNumber: z.number().optional(),
+  intervalDays: z.number().optional(),
 });
 
 export const emailSendSchema = z.object({
@@ -128,6 +132,12 @@ export const followUpCreateSchema = z.object({
   scheduledAt: z.string().min(1, "Scheduled date is required"),
   dueTime: z.string().optional().default("10:00 AM"),
   priority: z.enum(["HIGH", "MEDIUM", "LOW", "high", "medium", "low"]).optional().default("medium"),
+  intervalDays: z.number().optional().default(3),
+  currentStep: z.number().optional().default(1),
+  originalMessageDate: z.string().optional(),
+  templateCategory: z.string().optional(),
+  templateName: z.string().optional(),
+  subject: z.string().optional(),
 });
 
 export const followUpUpdateSchema = z.object({
@@ -138,6 +148,15 @@ export const followUpUpdateSchema = z.object({
   dueTime: z.string().optional(),
   status: z.string().optional(),
   priority: z.string().optional(),
+  intervalDays: z.number().optional(),
+  currentStep: z.number().optional(),
+  templateCategory: z.string().optional(),
+  templateName: z.string().optional(),
+  subject: z.string().optional(),
+  firstFollowUpSentAt: z.string().optional(),
+  secondFollowUpSentAt: z.string().optional(),
+  isRescheduled: z.boolean().optional(),
+  rescheduleNotice: z.string().optional(),
 });
 
 export const templateSchema = z.object({

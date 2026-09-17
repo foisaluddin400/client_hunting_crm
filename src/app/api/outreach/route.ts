@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
-import { Lead, OutreachActivity } from "@/lib/models";
+import { Lead, OutreachActivity, FollowUp } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { outreachCreateSchema } from "@/lib/validations/schemas";
-import { transformActivity } from "@/lib/transformers";
+import { transformActivity, formatEnglishDate } from "@/lib/transformers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,8 +24,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { leadId, channel, recipient, subject, message, status, notes, senderEmail, outreachType } =
-      parseResult.data;
+    const {
+      leadId,
+      channel,
+      recipient,
+      subject,
+      message,
+      status,
+      notes,
+      senderEmail,
+      outreachType,
+      templateCategory,
+      templateName,
+      followUpNumber,
+      intervalDays,
+    } = parseResult.data;
 
     // Validate lead ownership
     const lead = await Lead.findOne({
@@ -40,6 +53,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const chLower = (channel || "email").toLowerCase();
     const chUpper = (channel || "EMAIL").toUpperCase() as any;
     const stUpper = (status || "PREPARED").toUpperCase() as any;
 
@@ -55,7 +69,86 @@ export async function POST(req: NextRequest) {
       notes: notes?.trim() || undefined,
       senderEmail: senderEmail?.trim() || undefined,
       outreachType: outreachType?.trim() || undefined,
+      templateCategory: templateCategory?.trim() || outreachType?.trim() || undefined,
+      templateName: templateName?.trim() || undefined,
+      followUpNumber: followUpNumber || undefined,
+      intervalDays: intervalDays || undefined,
     });
+
+    // Advance platform-specific follow-up cadence if this is a follow-up
+    if (followUpNumber) {
+      const activeFollowUp = await FollowUp.findOne({
+        userId: authUser.userId,
+        leadId: lead._id,
+        channel: chLower,
+        status: { $ne: "COMPLETED" },
+      });
+
+      if (activeFollowUp) {
+        const now = new Date();
+        const todayDateStr = now.toISOString().split("T")[0];
+        const interval = activeFollowUp.intervalDays || intervalDays || 3;
+
+        if (followUpNumber === 1 || activeFollowUp.currentStep === 1) {
+          activeFollowUp.firstFollowUpSentAt = now;
+          const schedDateStr = activeFollowUp.firstFollowUpScheduledAt
+            ? activeFollowUp.firstFollowUpScheduledAt.toISOString().split("T")[0]
+            : activeFollowUp.scheduledAt.toISOString().split("T")[0];
+
+          activeFollowUp.history.push({
+            followUpNumber: 1,
+            scheduledDate: schedDateStr,
+            sentAt: now,
+            sentDate: todayDateStr,
+            channel: chLower,
+            templateCategory: templateCategory || outreachType || activeFollowUp.templateCategory,
+            templateName: templateName || activeFollowUp.templateName,
+            subject: subject || activeFollowUp.subject,
+            messagePreview: message.substring(0, 100),
+            notes: notes || "1st Follow-up sent",
+          });
+
+          // Calculate 2nd follow-up from ACTUAL 1st follow-up send date
+          const nextDueDate = new Date(now.getTime() + interval * 24 * 60 * 60 * 1000);
+          activeFollowUp.secondFollowUpScheduledAt = nextDueDate;
+          activeFollowUp.scheduledAt = nextDueDate;
+          activeFollowUp.currentStep = 2;
+
+          // Check if 1st follow-up was overdue
+          if (activeFollowUp.firstFollowUpScheduledAt && now > activeFollowUp.firstFollowUpScheduledAt) {
+            activeFollowUp.isRescheduled = true;
+            activeFollowUp.rescheduleNotice = `Rescheduled: You need to send the 2nd follow-up on ${formatEnglishDate(nextDueDate)}.`;
+          }
+
+          await activeFollowUp.save();
+        } else if (followUpNumber === 2 || activeFollowUp.currentStep === 2) {
+          activeFollowUp.secondFollowUpSentAt = now;
+          const schedDateStr = activeFollowUp.secondFollowUpScheduledAt
+            ? activeFollowUp.secondFollowUpScheduledAt.toISOString().split("T")[0]
+            : activeFollowUp.scheduledAt.toISOString().split("T")[0];
+
+          activeFollowUp.history.push({
+            followUpNumber: 2,
+            scheduledDate: schedDateStr,
+            sentAt: now,
+            sentDate: todayDateStr,
+            channel: chLower,
+            templateCategory: templateCategory || outreachType || activeFollowUp.templateCategory,
+            templateName: templateName || activeFollowUp.templateName,
+            subject: subject || activeFollowUp.subject,
+            messagePreview: message.substring(0, 100),
+            notes: notes || "2nd Follow-up sent",
+          });
+
+          // Maximum 2 follow-ups reached -> COMPLETED
+          activeFollowUp.currentStep = 3;
+          activeFollowUp.status = "COMPLETED";
+          activeFollowUp.completedAt = now;
+
+          await activeFollowUp.save();
+        }
+      }
+    }
 
     // Update lead lastContactAt and status
     lead.lastContactAt = new Date();

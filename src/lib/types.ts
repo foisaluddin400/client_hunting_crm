@@ -37,8 +37,12 @@ export interface ActivityItem {
   author?: string;
   senderEmail?: string;
   outreachType?: string;
+  templateCategory?: string;
+  templateName?: string;
   recipient?: string;
   subject?: string;
+  followUpNumber?: number;
+  intervalDays?: number;
 }
 
 export type VerificationStatus =
@@ -199,6 +203,20 @@ export interface LeadFinderBusinessItem {
   phoneVerification?: PhoneVerificationResult;
 }
 
+export interface FollowUpHistoryItem {
+  id?: string;
+  followUpNumber: number; // 1 or 2
+  scheduledDate?: string; // YYYY-MM-DD
+  sentAt?: string; // ISO string
+  sentDate?: string; // YYYY-MM-DD
+  channel: Channel;
+  templateCategory?: string;
+  templateName?: string;
+  subject?: string;
+  messagePreview?: string;
+  notes?: string;
+}
+
 export interface FollowUpItem {
   id: string;
   leadId: string;
@@ -212,6 +230,27 @@ export interface FollowUpItem {
   priority: Priority;
   notes?: string;
   completedAt?: string;
+
+  // Cadence and step fields
+  intervalDays?: number; // e.g. 2, 3, 5, 7
+  currentStep?: number; // 1 = 1st follow-up, 2 = 2nd follow-up, 3 = completed
+  originalMessageDate?: string; // YYYY-MM-DD
+  templateCategory?: string;
+  templateName?: string;
+  subject?: string; // For email
+
+  // Step dates
+  firstFollowUpScheduledAt?: string;
+  firstFollowUpSentAt?: string;
+  secondFollowUpScheduledAt?: string;
+  secondFollowUpSentAt?: string;
+
+  // Rescheduling notice
+  isRescheduled?: boolean;
+  rescheduleNotice?: string;
+
+  // Full history
+  history?: FollowUpHistoryItem[];
 }
 
 export interface MessageTemplate {

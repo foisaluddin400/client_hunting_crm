@@ -11,8 +11,9 @@ import {
   WebsiteStatusBadge,
   ChannelIcon,
 } from "@/components/ui/Badge";
-import { LeadStatus, Channel, ActivityItem, WebsiteAuditItem, EmailVerificationResult, PhoneVerificationResult } from "@/lib/types";
+import { LeadStatus, Channel, ActivityItem, WebsiteAuditItem, EmailVerificationResult, PhoneVerificationResult, FollowUpItem } from "@/lib/types";
 import { AuditDetailsModal } from "./AuditDetailsModal";
+import { FollowUpDetailsModal } from "@/components/follow-ups/FollowUpDetailsModal";
 import { VerificationStatusBadge } from "@/components/verification/VerificationStatusBadge";
 import { EmailVerificationModal } from "@/components/verification/EmailVerificationModal";
 import { PhoneVerificationModal } from "@/components/verification/PhoneVerificationModal";
@@ -85,6 +86,7 @@ export function LeadDetailsDrawer() {
   // Verification modals state
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [selectedFollowUpForModal, setSelectedFollowUpForModal] = useState<FollowUpItem | null>(null);
 
   // Sender Gmail editing state
   const [isEditingSenderGmail, setIsEditingSenderGmail] = useState(false);
@@ -1176,50 +1178,142 @@ export function LeadDetailsDrawer() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-700">
-                Scheduled Follow-up Reminders
+                Scheduled Follow-up Cadences ({leadFollowUps.length})
               </span>
             </div>
 
             {leadFollowUps.length > 0 ? (
-              <div className="space-y-2.5">
-                {leadFollowUps.map((fu) => (
-                  <div
-                    key={fu.id}
-                    className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start justify-between gap-3"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <ChannelIcon channel={fu.channel} size="sm" />
-                        <span className="text-xs font-bold text-slate-800">
-                          Due: {fu.dueDate} {fu.dueTime ? `at ${fu.dueTime}` : ""}
-                        </span>
+              <div className="space-y-3">
+                {leadFollowUps.map((fu) => {
+                  const isCompleted = fu.status === "completed" || (fu.currentStep !== undefined && fu.currentStep > 2);
+                  const isOverdue = fu.status === "overdue";
+                  const isToday = fu.status === "today";
+
+                  return (
+                    <div
+                      key={fu.id}
+                      className={`p-4 rounded-xl border space-y-2.5 transition-all ${
+                        isCompleted
+                          ? "bg-slate-50 border-slate-200 opacity-80"
+                          : isOverdue
+                          ? "bg-white border-rose-200 shadow-2xs ring-1 ring-rose-500/10"
+                          : isToday
+                          ? "bg-white border-amber-200 shadow-2xs ring-1 ring-amber-500/10"
+                          : "bg-white border-slate-200 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700 capitalize border border-slate-200">
+                              <ChannelIcon channel={fu.channel} size="sm" />
+                              {fu.channel}
+                            </span>
+
+                            {/* Cadence Step Badge */}
+                            {isCompleted ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Completed (2/2)
+                              </span>
+                            ) : fu.currentStep === 2 ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                2nd Follow-up
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                                1st Follow-up
+                              </span>
+                            )}
+                          </div>
+
+                          <span className="text-xs font-bold text-slate-800 block">
+                            Due: {fu.dueDate} {fu.dueTime ? `at ${fu.dueTime}` : ""}
+                          </span>
+                        </div>
+
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                            fu.status === "completed"
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase ${
+                            isCompleted
                               ? "bg-emerald-100 text-emerald-800"
-                              : fu.status === "overdue"
+                              : isOverdue
                               ? "bg-rose-100 text-rose-700"
-                              : "bg-amber-100 text-amber-800"
+                              : isToday
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-700"
                           }`}
                         >
                           {fu.status}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600">
+
+                      {/* Template & Subject info */}
+                      {(fu.templateCategory || fu.templateName || fu.subject) && (
+                        <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1 text-xs">
+                          {(fu.templateCategory || fu.templateName) && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-slate-500 font-medium">Template:</span>
+                              <span className="font-semibold text-slate-800">
+                                {fu.templateCategory || "Outreach"}
+                              </span>
+                              {fu.templateName && fu.templateName !== fu.templateCategory && (
+                                <span className="text-indigo-600 font-medium">
+                                  • {fu.templateName}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {fu.subject && (
+                            <div className="flex items-center gap-1.5 text-slate-700 truncate">
+                              <span className="text-slate-500 font-medium">Subject:</span>
+                              <span className="font-semibold text-slate-900 truncate">
+                                &quot;{fu.subject}&quot;
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Reschedule Notice */}
+                      {fu.isRescheduled && (
+                        <p className="text-[11px] text-amber-800 font-semibold bg-amber-50 p-2 rounded-lg border border-amber-200">
+                          {fu.rescheduleNotice || "Rescheduled: Next follow-up adjusted dynamically."}
+                        </p>
+                      )}
+
+                      {/* Preview notes */}
+                      <p className="text-xs text-slate-600 font-mono line-clamp-2">
                         {fu.notes || fu.originalMessagePreview}
                       </p>
-                    </div>
 
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => openOutreach(lead, fu.channel, undefined, true)}
-                      leftIcon={<Send className="w-3.5 h-3.5" />}
-                    >
-                      Outreach
-                    </Button>
-                  </div>
-                ))}
+                      {/* Actions */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFollowUpForModal(fu)}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Audit & History Log</span>
+                        </button>
+
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => openOutreach(lead, fu.channel, undefined, true)}
+                          leftIcon={<Send className="w-3.5 h-3.5" />}
+                          className="text-xs"
+                        >
+                          {isCompleted
+                            ? "New Outreach"
+                            : fu.currentStep === 2
+                            ? "Send 2nd Follow-up"
+                            : "Send 1st Follow-up"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="p-6 text-center rounded-xl bg-slate-50 border border-dashed border-slate-200 text-xs text-slate-500">
@@ -1322,6 +1416,21 @@ export function LeadDetailsDrawer() {
             updateLead(lead.id, {
               phoneVerification: result,
             });
+          }}
+        />
+      )}
+
+      {/* Follow-up Details & History Audit Modal */}
+      {selectedFollowUpForModal && (
+        <FollowUpDetailsModal
+          isOpen={Boolean(selectedFollowUpForModal)}
+          onClose={() => setSelectedFollowUpForModal(null)}
+          followUp={selectedFollowUpForModal}
+          lead={lead}
+          onContinueOutreach={() => {
+            const ch = selectedFollowUpForModal.channel;
+            setSelectedFollowUpForModal(null);
+            openOutreach(lead, ch, undefined, true);
           }}
         />
       )}
