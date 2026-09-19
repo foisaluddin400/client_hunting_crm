@@ -5,6 +5,21 @@ import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/lib/context/toast-context";
 import { Save, StickyNote, Clock, Plus, X, FileText } from "lucide-react";
+import { CRM_TIMEZONE } from "@/lib/date-utils";
+
+function formatNoteSavedTime(dateInput?: Date | string | number | null): string {
+  if (!dateInput) return "";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: CRM_TIMEZONE,
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
+}
 
 // Dynamically import JoditEditor to prevent SSR window reference errors
 const JoditEditor = dynamic(() => import("jodit-react"), {
@@ -62,14 +77,7 @@ export default function NotesPage() {
               setActiveContent(firstNote.content || "");
               contentRef.current = firstNote.content || "";
               if (firstNote.updatedAt) {
-                setLastSavedTime(
-                  new Date(firstNote.updatedAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    month: "short",
-                    day: "numeric",
-                  })
-                );
+                setLastSavedTime(formatNoteSavedTime(firstNote.updatedAt));
               }
             } else {
               // Create default fallback note if empty
@@ -145,14 +153,7 @@ export default function NotesPage() {
       setActiveContent(targetNote.content || "");
       contentRef.current = targetNote.content || "";
       if (targetNote.updatedAt) {
-        setLastSavedTime(
-          new Date(targetNote.updatedAt).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            month: "short",
-            day: "numeric",
-          })
-        );
+        setLastSavedTime(formatNoteSavedTime(targetNote.updatedAt));
       }
     }
   };
@@ -214,14 +215,7 @@ export default function NotesPage() {
       setActiveTitle(createdNote.title);
       setActiveContent(createdNote.content || "");
       contentRef.current = createdNote.content || "";
-      setLastSavedTime(
-        new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          month: "short",
-          day: "numeric",
-        })
-      );
+      setLastSavedTime(formatNoteSavedTime(new Date()));
 
       showToast({
         type: "success",
@@ -341,14 +335,7 @@ export default function NotesPage() {
         ? new Date(data.note.updatedAt)
         : new Date();
 
-      setLastSavedTime(
-        savedTime.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          month: "short",
-          day: "numeric",
-        })
-      );
+      setLastSavedTime(formatNoteSavedTime(savedTime));
 
       // Update in notes state
       setNotes((prev) =>

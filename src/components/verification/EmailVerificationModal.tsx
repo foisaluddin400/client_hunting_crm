@@ -17,6 +17,7 @@ import {
   Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { formatDateTime } from "@/lib/date-utils";
 
 interface EmailVerificationModalProps {
   isOpen: boolean;
@@ -30,16 +31,7 @@ interface EmailVerificationModalProps {
 
 function formatCheckedDate(dateStr?: string): string {
   if (!dateStr) return "Never";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "Never";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
+  return formatDateTime(dateStr);
 }
 
 export function EmailVerificationModal({

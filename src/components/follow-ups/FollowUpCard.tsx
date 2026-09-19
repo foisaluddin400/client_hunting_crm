@@ -7,6 +7,7 @@ import { ChannelIcon, PriorityBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FollowUpDetailsModal } from "./FollowUpDetailsModal";
 import { formatEnglishDate } from "@/lib/transformers";
+import { formatDateTime } from "@/lib/date-utils";
 import {
   Calendar,
   Clock,
@@ -71,16 +72,7 @@ interface FollowUpCardProps {
 
 function formatCardDateTime(dateInput?: string | Date | null): string {
   if (!dateInput) return "";
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(d);
+  return formatDateTime(dateInput);
 }
 
 export function FollowUpCard({ item }: FollowUpCardProps) {

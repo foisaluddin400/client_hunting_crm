@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { WebsiteAuditItem, AuditCheckItem } from "@/lib/types";
 import { copyToClipboard } from "@/lib/utils";
+import { formatDateTime } from "@/lib/date-utils";
 import { useToast } from "@/lib/context/toast-context";
 import {
   CheckCircle2,
@@ -213,13 +214,7 @@ export function AuditDetailsModal({
                 </p>
                 {audit?.updatedAt && (
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Last audited: {new Date(audit.updatedAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    Last audited: {formatDateTime(audit.updatedAt)}
                   </p>
                 )}
               </div>

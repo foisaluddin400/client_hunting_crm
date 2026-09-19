@@ -9,6 +9,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { exportLeadsToCSV } from "@/lib/utils";
+import { formatDateTime } from "@/lib/date-utils";
 import { AuditDetailsModal } from "./AuditDetailsModal";
 import {
   normalizeEmail,
@@ -52,16 +53,7 @@ interface LeadTableProps {
 
 function formatLeadDateTime(dateStr?: string) {
   if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return dateStr;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
+  return formatDateTime(dateStr);
 }
 
 function getScoreBadgeStyle(score?: number) {

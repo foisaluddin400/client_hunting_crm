@@ -4,6 +4,7 @@ import connectToDatabase from "@/lib/mongodb";
 import { Lead, OutreachActivity, FollowUp, LeadFinderBusiness } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { fromDbLeadStatus } from "@/lib/transformers";
+import { getDhakaDayRange, toDhakaDateString, formatTime } from "@/lib/date-utils";
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
 
     const userId = authUser.userId;
     const userObjectId = new Types.ObjectId(userId);
+    const { start: todayStart, end: todayEnd } = getDhakaDayRange();
 
     const followUpSentCondition: any = {
       $or: [
@@ -107,8 +109,8 @@ export async function GET(req: NextRequest) {
         userId,
         status: "PENDING",
         scheduledAt: {
-          $gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          $lt: new Date(new Date().setHours(23, 59, 59, 999)),
+          $gte: todayStart,
+          $lte: todayEnd,
         },
       }),
     ]);
@@ -211,11 +213,8 @@ export async function GET(req: NextRequest) {
             : act.status === "PREPARED"
             ? `${act.channel} message prepared`
             : act.notes || `${act.channel} activity`,
-        date: new Date(act.createdAt).toISOString().split("T")[0],
-        time: new Date(act.createdAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        date: toDhakaDateString(act.createdAt),
+        time: formatTime(act.createdAt),
         messagePreview: act.message
           ? act.message.substring(0, 100) + (act.message.length > 100 ? "..." : "")
           : undefined,

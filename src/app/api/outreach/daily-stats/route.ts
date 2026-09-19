@@ -3,8 +3,15 @@ import { Types } from "mongoose";
 import connectToDatabase from "@/lib/mongodb";
 import { OutreachActivity, FollowUp, UserSettings } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
+import {
+  toDhakaDateString,
+  getDhakaTodayDateString,
+  getDhakaYesterdayDateString,
+  formatDate,
+  formatTime,
+} from "@/lib/date-utils";
 
-interface ActivitySummaryItem {
+export interface ActivitySummaryItem {
   id: string;
   channel: string;
   senderEmail?: string;
@@ -15,44 +22,65 @@ interface ActivitySummaryItem {
   isFollowUp?: boolean;
 }
 
+export interface ChannelBreakdown {
+  newCount: number;
+  followUpCount: number;
+  total: number;
+}
+
+export interface SenderEmailBreakdown {
+  newEmails: number;
+  followUpEmails: number;
+  total: number;
+}
+
 export interface DayStat {
-  date: string; // "YYYY-MM-DD"
-  displayDate: string; // "Sep 19, 2026"
-  weekday: string; // "Saturday"
+  date: string; // "YYYY-MM-DD" in Asia/Dhaka
+  displayDate: string; // "Sep 19, 2026" in Asia/Dhaka
+  weekday: string; // "Saturday" in Asia/Dhaka
   isToday: boolean;
   isYesterday: boolean;
-  emailsBySender: Record<string, number>;
+
+  // Detailed separation for Email by Sender Gmail
+  emailsBySender: Record<string, SenderEmailBreakdown>;
+  totalNewEmails: number;
+  totalFollowUpEmails: number;
   totalEmails: number;
+
+  // Detailed separation for platforms
+  whatsapp: ChannelBreakdown;
+  facebook: ChannelBreakdown;
+  linkedin: ChannelBreakdown;
+  instagram: ChannelBreakdown;
+  twitter: ChannelBreakdown;
+
+  // Overall totals
+  totalNewOutreach: number;
+  totalFollowUps: number;
+  totalSent: number;
+
+  // Backwards compatibility aliases
   whatsappCount: number;
   facebookCount: number;
   linkedinCount: number;
   instagramCount: number;
   twitterCount: number;
   followUpsCount: number;
-  totalSent: number;
-  activities: ActivitySummaryItem[];
-}
 
-function getLocalDateString(d: Date, tzOffsetMinutes?: number): string {
-  if (tzOffsetMinutes !== undefined && !isNaN(tzOffsetMinutes)) {
-    const localTime = new Date(d.getTime() - tzOffsetMinutes * 60000);
-    return localTime.toISOString().split("T")[0];
-  }
-  return d.toISOString().split("T")[0];
+  activities: ActivitySummaryItem[];
 }
 
 function formatDisplayDate(dateStr: string): { displayDate: string; weekday: string } {
   const parts = dateStr.split("-").map(Number);
   if (parts.length === 3) {
     const [year, month, day] = parts;
-    const d = new Date(year, month - 1, day);
+    const d = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
     return {
-      displayDate: d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      weekday: d.toLocaleDateString("en-US", { weekday: "short" }),
+      displayDate: formatDate(d),
+      weekday: new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Dhaka",
+        weekday: "short",
+      }).format(d),
     };
   }
   return { displayDate: dateStr, weekday: "" };
@@ -73,8 +101,6 @@ export async function GET(req: NextRequest) {
 
     const daysParam = searchParams.get("days");
     const isLast3Days = daysParam === "3";
-    const tzOffsetParam = searchParams.get("tzOffset");
-    const tzOffsetMinutes = tzOffsetParam !== null ? parseInt(tzOffsetParam, 10) : undefined;
 
     // Fetch user's configured Sender Gmails
     const userSettings = await UserSettings.findOne({ userId: userObjectId }).lean();
@@ -101,7 +127,7 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .populate({
         path: "leadId",
-        select: "businessName ceoName",
+        select: "businessName ceoName originalSenderEmail",
       })
       .lean();
 
@@ -118,20 +144,20 @@ export async function GET(req: NextRequest) {
     })
       .populate({
         path: "leadId",
-        select: "businessName ceoName",
+        select: "businessName ceoName originalSenderEmail",
       })
       .lean();
 
-    // Map to group stats by YYYY-MM-DD
+    // Map to group stats by Bangladesh date (YYYY-MM-DD)
     const dateMap = new Map<string, DayStat>();
 
     const getOrCreateDayStat = (dateStr: string): DayStat => {
       let existing = dateMap.get(dateStr);
       if (!existing) {
         const { displayDate, weekday } = formatDisplayDate(dateStr);
-        const emailSenders: Record<string, number> = {};
+        const emailSenders: Record<string, SenderEmailBreakdown> = {};
         for (const gmail of configuredSenderGmails) {
-          emailSenders[gmail] = 0;
+          emailSenders[gmail] = { newEmails: 0, followUpEmails: 0, total: 0 };
         }
 
         existing = {
@@ -141,14 +167,23 @@ export async function GET(req: NextRequest) {
           isToday: false,
           isYesterday: false,
           emailsBySender: emailSenders,
+          totalNewEmails: 0,
+          totalFollowUpEmails: 0,
           totalEmails: 0,
+          whatsapp: { newCount: 0, followUpCount: 0, total: 0 },
+          facebook: { newCount: 0, followUpCount: 0, total: 0 },
+          linkedin: { newCount: 0, followUpCount: 0, total: 0 },
+          instagram: { newCount: 0, followUpCount: 0, total: 0 },
+          twitter: { newCount: 0, followUpCount: 0, total: 0 },
+          totalNewOutreach: 0,
+          totalFollowUps: 0,
+          totalSent: 0,
           whatsappCount: 0,
           facebookCount: 0,
           linkedinCount: 0,
           instagramCount: 0,
           twitterCount: 0,
           followUpsCount: 0,
-          totalSent: 0,
           activities: [],
         };
         dateMap.set(dateStr, existing);
@@ -161,7 +196,8 @@ export async function GET(req: NextRequest) {
 
     for (const act of activities) {
       if (!act.createdAt) continue;
-      const dateStr = getLocalDateString(new Date(act.createdAt), tzOffsetMinutes);
+      // Convert UTC createdAt to Bangladesh calendar date
+      const dateStr = toDhakaDateString(act.createdAt);
       const stat = getOrCreateDayStat(dateStr);
 
       const ch = (act.channel || "").toUpperCase();
@@ -169,23 +205,25 @@ export async function GET(req: NextRequest) {
         (act.leadId as any)?.businessName ||
         (act.leadId as any)?.ceoName ||
         "Unknown Business";
-      const leadIdStr = (act.leadId as any)?._id?.toString() || act.leadId?.toString();
-      const timeStr = new Date(act.createdAt).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const leadIdStr = (act.leadId as any)?._id?.toString() || act.leadId?.toString() || "";
+      // Formatted in Bangladesh Time (e.g. 5:24 PM)
+      const timeStr = formatTime(act.createdAt);
 
       const isFollowUp =
         Boolean(act.followUpNumber) ||
-        (ch === "SYSTEM" && act.status === "COMPLETED");
+        (ch === "SYSTEM" && act.status === "COMPLETED") ||
+        act.notes?.toLowerCase().includes("follow-up") ||
+        act.outreachType?.toLowerCase().includes("follow-up");
 
       if (isFollowUp) {
-        const fuKey = `${dateStr}_${leadIdStr}_${act.followUpNumber || "comp"}`;
+        const fuKey = `${dateStr}_${leadIdStr}_${act.followUpNumber || "act"}_${ch}`;
         if (!recordedFollowUpKeys.has(fuKey)) {
           recordedFollowUpKeys.add(fuKey);
+          stat.totalFollowUps++;
           stat.followUpsCount++;
-          stat.totalSent++;
         }
+      } else {
+        stat.totalNewOutreach++;
       }
 
       if (ch === "EMAIL") {
@@ -196,25 +234,62 @@ export async function GET(req: NextRequest) {
         if (!sender) {
           sender = "Other / Default";
         }
-        stat.emailsBySender[sender] = (stat.emailsBySender[sender] || 0) + 1;
+        if (!stat.emailsBySender[sender]) {
+          stat.emailsBySender[sender] = { newEmails: 0, followUpEmails: 0, total: 0 };
+        }
+
+        if (isFollowUp) {
+          stat.emailsBySender[sender].followUpEmails++;
+          stat.totalFollowUpEmails++;
+        } else {
+          stat.emailsBySender[sender].newEmails++;
+          stat.totalNewEmails++;
+        }
+        stat.emailsBySender[sender].total++;
         stat.totalEmails++;
-        if (!isFollowUp) stat.totalSent++;
       } else if (ch === "WHATSAPP") {
-        stat.whatsappCount++;
-        if (!isFollowUp) stat.totalSent++;
+        if (isFollowUp) {
+          stat.whatsapp.followUpCount++;
+        } else {
+          stat.whatsapp.newCount++;
+        }
+        stat.whatsapp.total++;
+        stat.whatsappCount = stat.whatsapp.total;
       } else if (ch === "FACEBOOK") {
-        stat.facebookCount++;
-        if (!isFollowUp) stat.totalSent++;
+        if (isFollowUp) {
+          stat.facebook.followUpCount++;
+        } else {
+          stat.facebook.newCount++;
+        }
+        stat.facebook.total++;
+        stat.facebookCount = stat.facebook.total;
       } else if (ch === "LINKEDIN") {
-        stat.linkedinCount++;
-        if (!isFollowUp) stat.totalSent++;
+        if (isFollowUp) {
+          stat.linkedin.followUpCount++;
+        } else {
+          stat.linkedin.newCount++;
+        }
+        stat.linkedin.total++;
+        stat.linkedinCount = stat.linkedin.total;
       } else if (ch === "INSTAGRAM") {
-        stat.instagramCount++;
-        if (!isFollowUp) stat.totalSent++;
+        if (isFollowUp) {
+          stat.instagram.followUpCount++;
+        } else {
+          stat.instagram.newCount++;
+        }
+        stat.instagram.total++;
+        stat.instagramCount = stat.instagram.total;
       } else if (ch === "TWITTER") {
-        stat.twitterCount++;
-        if (!isFollowUp) stat.totalSent++;
+        if (isFollowUp) {
+          stat.twitter.followUpCount++;
+        } else {
+          stat.twitter.newCount++;
+        }
+        stat.twitter.total++;
+        stat.twitterCount = stat.twitter.total;
       }
+
+      stat.totalSent = stat.totalNewOutreach + stat.totalFollowUps;
 
       stat.activities.push({
         id: act._id.toString(),
@@ -230,30 +305,70 @@ export async function GET(req: NextRequest) {
 
     // Process Follow-ups to capture any completed actions not already logged in OutreachActivity
     for (const fu of followUps) {
-      const leadIdStr = (fu.leadId as any)?._id?.toString() || fu.leadId?.toString();
+      const leadIdStr = (fu.leadId as any)?._id?.toString() || fu.leadId?.toString() || "";
       const bName =
         (fu.leadId as any)?.businessName ||
         (fu.leadId as any)?.ceoName ||
         "Client";
+      const leadSenderEmail =
+        (fu.leadId as any)?.originalSenderEmail?.toLowerCase().trim() ||
+        configuredSenderGmails[0] ||
+        "Other / Default";
 
       // 1. Check history entries
       if (Array.isArray(fu.history)) {
         for (const h of fu.history) {
           const sentDate = h.sentAt
-            ? getLocalDateString(new Date(h.sentAt), tzOffsetMinutes)
+            ? toDhakaDateString(h.sentAt)
             : h.sentDate;
+          const ch = ((h.channel || fu.channel || "email").toUpperCase() as string);
+
           if (sentDate) {
-            const fuKey = `${sentDate}_${leadIdStr}_${h.followUpNumber}`;
+            const fuKey = `${sentDate}_${leadIdStr}_${h.followUpNumber || 1}_${ch}`;
             if (!recordedFollowUpKeys.has(fuKey)) {
               recordedFollowUpKeys.add(fuKey);
               const stat = getOrCreateDayStat(sentDate);
+              stat.totalFollowUps++;
               stat.followUpsCount++;
-              stat.totalSent++;
+
+              if (ch === "EMAIL") {
+                if (!stat.emailsBySender[leadSenderEmail]) {
+                  stat.emailsBySender[leadSenderEmail] = { newEmails: 0, followUpEmails: 0, total: 0 };
+                }
+                stat.emailsBySender[leadSenderEmail].followUpEmails++;
+                stat.emailsBySender[leadSenderEmail].total++;
+                stat.totalFollowUpEmails++;
+                stat.totalEmails++;
+              } else if (ch === "WHATSAPP") {
+                stat.whatsapp.followUpCount++;
+                stat.whatsapp.total++;
+                stat.whatsappCount = stat.whatsapp.total;
+              } else if (ch === "FACEBOOK") {
+                stat.facebook.followUpCount++;
+                stat.facebook.total++;
+                stat.facebookCount = stat.facebook.total;
+              } else if (ch === "LINKEDIN") {
+                stat.linkedin.followUpCount++;
+                stat.linkedin.total++;
+                stat.linkedinCount = stat.linkedin.total;
+              } else if (ch === "INSTAGRAM") {
+                stat.instagram.followUpCount++;
+                stat.instagram.total++;
+                stat.instagramCount = stat.instagram.total;
+              } else if (ch === "TWITTER") {
+                stat.twitter.followUpCount++;
+                stat.twitter.total++;
+                stat.twitterCount = stat.twitter.total;
+              }
+
+              stat.totalSent = stat.totalNewOutreach + stat.totalFollowUps;
+
               stat.activities.push({
                 id: `fu-${fu._id}-${h.followUpNumber}`,
-                channel: (h.channel || fu.channel || "follow-up").toLowerCase(),
+                channel: ch.toLowerCase(),
                 businessName: bName,
                 leadId: leadIdStr,
+                time: h.sentAt ? formatTime(h.sentAt) : undefined,
                 type: `${h.followUpNumber === 1 ? "1st" : "2nd"} Follow-up Sent`,
                 isFollowUp: true,
               });
@@ -264,48 +379,115 @@ export async function GET(req: NextRequest) {
 
       // 2. Check firstFollowUpSentAt
       if (fu.firstFollowUpSentAt) {
-        const sentDate = getLocalDateString(new Date(fu.firstFollowUpSentAt), tzOffsetMinutes);
-        const fuKey = `${sentDate}_${leadIdStr}_1`;
+        const sentDate = toDhakaDateString(fu.firstFollowUpSentAt);
+        const ch = ((fu.channel || "email").toUpperCase() as string);
+        const fuKey = `${sentDate}_${leadIdStr}_1_${ch}`;
         if (!recordedFollowUpKeys.has(fuKey)) {
           recordedFollowUpKeys.add(fuKey);
           const stat = getOrCreateDayStat(sentDate);
+          stat.totalFollowUps++;
           stat.followUpsCount++;
-          stat.totalSent++;
+
+          if (ch === "EMAIL") {
+            if (!stat.emailsBySender[leadSenderEmail]) {
+              stat.emailsBySender[leadSenderEmail] = { newEmails: 0, followUpEmails: 0, total: 0 };
+            }
+            stat.emailsBySender[leadSenderEmail].followUpEmails++;
+            stat.emailsBySender[leadSenderEmail].total++;
+            stat.totalFollowUpEmails++;
+            stat.totalEmails++;
+          } else if (ch === "WHATSAPP") {
+            stat.whatsapp.followUpCount++;
+            stat.whatsapp.total++;
+            stat.whatsappCount = stat.whatsapp.total;
+          } else if (ch === "FACEBOOK") {
+            stat.facebook.followUpCount++;
+            stat.facebook.total++;
+            stat.facebookCount = stat.facebook.total;
+          } else if (ch === "LINKEDIN") {
+            stat.linkedin.followUpCount++;
+            stat.linkedin.total++;
+            stat.linkedinCount = stat.linkedin.total;
+          } else if (ch === "INSTAGRAM") {
+            stat.instagram.followUpCount++;
+            stat.instagram.total++;
+            stat.instagramCount = stat.instagram.total;
+          } else if (ch === "TWITTER") {
+            stat.twitter.followUpCount++;
+            stat.twitter.total++;
+            stat.twitterCount = stat.twitter.total;
+          }
+
+          stat.totalSent = stat.totalNewOutreach + stat.totalFollowUps;
         }
       }
 
       // 3. Check secondFollowUpSentAt
       if (fu.secondFollowUpSentAt) {
-        const sentDate = getLocalDateString(new Date(fu.secondFollowUpSentAt), tzOffsetMinutes);
-        const fuKey = `${sentDate}_${leadIdStr}_2`;
+        const sentDate = toDhakaDateString(fu.secondFollowUpSentAt);
+        const ch = ((fu.channel || "email").toUpperCase() as string);
+        const fuKey = `${sentDate}_${leadIdStr}_2_${ch}`;
         if (!recordedFollowUpKeys.has(fuKey)) {
           recordedFollowUpKeys.add(fuKey);
           const stat = getOrCreateDayStat(sentDate);
+          stat.totalFollowUps++;
           stat.followUpsCount++;
-          stat.totalSent++;
+
+          if (ch === "EMAIL") {
+            if (!stat.emailsBySender[leadSenderEmail]) {
+              stat.emailsBySender[leadSenderEmail] = { newEmails: 0, followUpEmails: 0, total: 0 };
+            }
+            stat.emailsBySender[leadSenderEmail].followUpEmails++;
+            stat.emailsBySender[leadSenderEmail].total++;
+            stat.totalFollowUpEmails++;
+            stat.totalEmails++;
+          } else if (ch === "WHATSAPP") {
+            stat.whatsapp.followUpCount++;
+            stat.whatsapp.total++;
+            stat.whatsappCount = stat.whatsapp.total;
+          } else if (ch === "FACEBOOK") {
+            stat.facebook.followUpCount++;
+            stat.facebook.total++;
+            stat.facebookCount = stat.facebook.total;
+          } else if (ch === "LINKEDIN") {
+            stat.linkedin.followUpCount++;
+            stat.linkedin.total++;
+            stat.linkedinCount = stat.linkedin.total;
+          } else if (ch === "INSTAGRAM") {
+            stat.instagram.followUpCount++;
+            stat.instagram.total++;
+            stat.instagramCount = stat.instagram.total;
+          } else if (ch === "TWITTER") {
+            stat.twitter.followUpCount++;
+            stat.twitter.total++;
+            stat.twitterCount = stat.twitter.total;
+          }
+
+          stat.totalSent = stat.totalNewOutreach + stat.totalFollowUps;
         }
       }
 
       // 4. Check completedAt
       if (fu.completedAt) {
-        const compDate = getLocalDateString(new Date(fu.completedAt), tzOffsetMinutes);
-        const fuKey = `${compDate}_${leadIdStr}_comp`;
+        const compDate = toDhakaDateString(fu.completedAt);
+        const ch = ((fu.channel || "email").toUpperCase() as string);
+        const fuKey = `${compDate}_${leadIdStr}_comp_${ch}`;
         if (!recordedFollowUpKeys.has(fuKey)) {
           recordedFollowUpKeys.add(fuKey);
           const stat = getOrCreateDayStat(compDate);
+          stat.totalFollowUps++;
           stat.followUpsCount++;
-          stat.totalSent++;
+          stat.totalSent = stat.totalNewOutreach + stat.totalFollowUps;
         }
       }
     }
 
-    // Determine Today and Yesterday in user's timezone
+    // Determine Today, Yesterday, and Day Before Yesterday in Bangladesh Time
+    const todayStr = getDhakaTodayDateString();
+    const yesterdayStr = getDhakaYesterdayDateString();
     const now = new Date();
-    const todayStr = getLocalDateString(now, tzOffsetMinutes);
-    const yesterdayDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const yesterdayStr = getLocalDateString(yesterdayDate, tzOffsetMinutes);
     const dayBeforeDate = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-    const dayBeforeStr = getLocalDateString(dayBeforeDate, tzOffsetMinutes);
+    const dayBeforeStr = toDhakaDateString(dayBeforeDate);
 
     // If Last 3 Days requested (Dashboard)
     if (isLast3Days) {
@@ -333,7 +515,7 @@ export async function GET(req: NextRequest) {
 
     allDays.sort((a, b) => b.date.localeCompare(a.date));
 
-    // Also ensure today is always present in the dictionary
+    // Ensure today is always present in dictionary
     const todayStat = getOrCreateDayStat(todayStr);
     todayStat.isToday = true;
 

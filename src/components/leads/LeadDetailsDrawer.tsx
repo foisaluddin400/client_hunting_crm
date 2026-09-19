@@ -12,6 +12,7 @@ import {
   ChannelIcon,
 } from "@/components/ui/Badge";
 import { LeadStatus, Channel, ActivityItem, WebsiteAuditItem, EmailVerificationResult, PhoneVerificationResult, FollowUpItem } from "@/lib/types";
+import { toDhakaDateString, formatTime, formatDateTime, formatDate } from "@/lib/date-utils";
 import { AuditDetailsModal } from "./AuditDetailsModal";
 import { FollowUpDetailsModal } from "@/components/follow-ups/FollowUpDetailsModal";
 import { VerificationStatusBadge } from "@/components/verification/VerificationStatusBadge";
@@ -175,8 +176,8 @@ export function LeadDetailsDrawer() {
     e.preventDefault();
     if (!customActivityMessage.trim()) return;
 
-    const todayStr = new Date().toISOString().split("T")[0];
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const todayStr = toDhakaDateString(new Date());
+    const timeStr = formatTime(new Date());
 
     logActivity(lead.id, {
       channel: customActivityChannel,

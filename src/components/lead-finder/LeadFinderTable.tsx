@@ -14,6 +14,13 @@ import {
   DuplicateContactCounts,
 } from "@/lib/duplicate-detector";
 import {
+  toDhakaDateString,
+  getDhakaTodayDateString,
+  getDhakaYesterdayDateString,
+  formatDateTime as formatDhakaDateTime,
+  getDhakaDayRange,
+} from "@/lib/date-utils";
+import {
   ExternalLink,
   MapPin,
   Phone,
@@ -224,18 +231,16 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
       if (statusFilter === "inLeads" && !b.isSelected) return false;
       if (statusFilter === "finderOnly" && b.isSelected) return false;
 
-      // 6. Date/Time Filter
+      // 6. Date/Time Filter (aligned with Bangladesh calendar boundaries)
       if (timeFilter !== "all") {
+        const itemDhakaDate = toDhakaDateString(b.foundAt);
         const itemDate = new Date(b.foundAt);
         const now = new Date();
 
         if (timeFilter === "today") {
-          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          if (itemDate < startOfToday) return false;
+          if (itemDhakaDate !== getDhakaTodayDateString()) return false;
         } else if (timeFilter === "yesterday") {
-          const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-          const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          if (itemDate < startOfYesterday || itemDate >= endOfYesterday) return false;
+          if (itemDhakaDate !== getDhakaYesterdayDateString()) return false;
         } else if (timeFilter === "7days") {
           const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           if (itemDate < sevenDaysAgo) return false;
@@ -243,10 +248,9 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
           const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           if (itemDate < thirtyDaysAgo) return false;
         } else if (timeFilter === "custom" && customStartDate) {
-          const start = new Date(customStartDate);
-          const end = customEndDate ? new Date(customEndDate) : new Date();
-          end.setHours(23, 59, 59, 999);
-          if (itemDate < start || itemDate > end) return false;
+          const startRange = getDhakaDayRange(customStartDate);
+          const endRange = customEndDate ? getDhakaDayRange(customEndDate) : getDhakaDayRange();
+          if (itemDate < startRange.start || itemDate > endRange.end) return false;
         }
       }
 
@@ -306,20 +310,7 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
   };
 
   const formatDateTime = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } catch {
-      return dateStr;
-    }
+    return formatDhakaDateTime(dateStr);
   };
 
   return (

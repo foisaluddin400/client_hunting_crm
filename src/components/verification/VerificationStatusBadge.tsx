@@ -3,6 +3,7 @@
 import React from "react";
 import { VerificationStatus } from "@/lib/types";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { formatDate } from "@/lib/date-utils";
 
 interface VerificationStatusBadgeProps {
   status?: VerificationStatus | null;
@@ -33,7 +34,7 @@ function formatTimeAgo(dateInput?: string | Date | null): string {
   if (diffDays === 1) return "yesterday";
   if (diffDays < 30) return `${diffDays} days ago`;
 
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatDate(date);
 }
 
 export function getStatusConfig(status?: VerificationStatus | null) {

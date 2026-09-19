@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { copyToClipboard, replaceTemplateVariables } from "@/lib/utils";
+import { copyToClipboard, replaceTemplateVariables, toDhakaDateString, formatTime } from "@/lib/utils";
 import { normalizeCategory } from "@/lib/transformers";
 import {
   TwitterXIcon,
@@ -278,8 +278,8 @@ export function OutreachModal() {
       const days = parseInt(scheduleFollowUpDays, 10);
       const followUpDate = new Date();
       followUpDate.setDate(followUpDate.getDate() + days);
-      const dueDateStr = followUpDate.toISOString().split("T")[0];
-      const todayStr = new Date().toISOString().split("T")[0];
+      const dueDateStr = toDhakaDateString(followUpDate);
+      const todayStr = toDhakaDateString(new Date());
 
       const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
 
@@ -404,11 +404,8 @@ export function OutreachModal() {
     const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
     const templateNameToUse = selectedTpl?.name || (isFollowUp ? activeFollowUp?.templateName : undefined);
 
-    const todayStr = new Date().toISOString().split("T")[0];
-    const timeStr = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const todayStr = toDhakaDateString(new Date());
+    const timeStr = formatTime(new Date());
 
     // Record outreach activity in DB
     await logActivity(lead.id, {
@@ -466,11 +463,8 @@ export function OutreachModal() {
 
     await copyToClipboard(message);
 
-    const todayStr = new Date().toISOString().split("T")[0];
-    const timeStr = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const todayStr = toDhakaDateString(new Date());
+    const timeStr = formatTime(new Date());
 
     const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
     const categoryToUse = isFollowUp

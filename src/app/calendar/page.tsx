@@ -10,11 +10,14 @@ import {
   MessageSquare,
   CalendarCheck,
   Clock,
-  ExternalLink,
+  ArrowRight,
+  TrendingUp,
   Sparkles,
   Info,
   CheckCircle2,
-  Filter,
+  CalendarDays,
+  Send,
+  RotateCcw,
 } from "lucide-react";
 import {
   TwitterXIcon,
@@ -23,6 +26,13 @@ import {
   FacebookIcon,
 } from "@/components/ui/Icons";
 import { Button } from "@/components/ui/Button";
+import {
+  toDhakaDateString,
+  getDhakaTodayDateString,
+  formatDate,
+  formatEnglishDate,
+  formatTime,
+} from "@/lib/date-utils";
 
 interface ActivityItem {
   id: string;
@@ -35,21 +45,48 @@ interface ActivityItem {
   isFollowUp?: boolean;
 }
 
+interface SenderEmailBreakdown {
+  newEmails: number;
+  followUpEmails: number;
+  total: number;
+}
+
+interface ChannelBreakdown {
+  newCount: number;
+  followUpCount: number;
+  total: number;
+}
+
 interface DayStat {
-  date: string; // "YYYY-MM-DD"
-  displayDate: string; // "Sep 19, 2026"
+  date: string; // "YYYY-MM-DD" in Asia/Dhaka
+  displayDate: string; // "Sep 19, 2026" in Asia/Dhaka
   weekday: string;
   isToday: boolean;
   isYesterday: boolean;
-  emailsBySender: Record<string, number>;
+
+  emailsBySender: Record<string, SenderEmailBreakdown>;
+  totalNewEmails: number;
+  totalFollowUpEmails: number;
   totalEmails: number;
-  whatsappCount: number;
-  facebookCount: number;
-  linkedinCount: number;
-  instagramCount: number;
-  twitterCount: number;
-  followUpsCount: number;
+
+  whatsapp: ChannelBreakdown;
+  facebook: ChannelBreakdown;
+  linkedin: ChannelBreakdown;
+  instagram: ChannelBreakdown;
+  twitter: ChannelBreakdown;
+
+  totalNewOutreach: number;
+  totalFollowUps: number;
   totalSent: number;
+
+  // Backwards-compatible fields
+  whatsappCount?: number;
+  facebookCount?: number;
+  linkedinCount?: number;
+  instagramCount?: number;
+  twitterCount?: number;
+  followUpsCount?: number;
+
   activities: ActivityItem[];
 }
 
@@ -65,8 +102,7 @@ export default function CalendarPage() {
   // Fetch all historical outreach data from existing records
   const fetchAllStats = useCallback(async () => {
     try {
-      const tzOffset = new Date().getTimezoneOffset();
-      const res = await fetch(`/api/outreach/daily-stats?tzOffset=${tzOffset}`);
+      const res = await fetch(`/api/outreach/daily-stats`);
       if (res.ok) {
         const data = await res.json();
         if (data.dateMap) {
@@ -80,7 +116,7 @@ export default function CalendarPage() {
         }
       }
     } catch (err) {
-      console.error("Failed to load calendar daily stats:", err);
+      console.error("Failed to load historical outreach stats:", err);
     } finally {
       setIsLoading(false);
     }
@@ -90,22 +126,17 @@ export default function CalendarPage() {
     fetchAllStats();
   }, [fetchAllStats]);
 
-  // If selectedDateStr not set initially, default to today in YYYY-MM-DD
+  // Set today as initial selection if none chosen yet
   useEffect(() => {
     if (!selectedDateStr) {
-      const now = new Date();
-      const yr = now.getFullYear();
-      const mo = String(now.getMonth() + 1).padStart(2, "0");
-      const da = String(now.getDate()).padStart(2, "0");
-      setSelectedDateStr(`${yr}-${mo}-${da}`);
+      const todayStr = getDhakaTodayDateString();
+      setSelectedDateStr(todayStr);
     }
   }, [selectedDateStr]);
 
-  // Calendar month calculation
+  // Month and Year navigation state
   const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth(); // 0-indexed
-
-  const monthName = currentDate.toLocaleString("en-US", { month: "long" });
+  const currentMonth = currentDate.getMonth();
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
@@ -117,68 +148,83 @@ export default function CalendarPage() {
 
   const handleToday = () => {
     const now = new Date();
-    setCurrentDate(new Date(now.getFullYear(), now.getMonth(), 1));
-    const yr = now.getFullYear();
-    const mo = String(now.getMonth() + 1).padStart(2, "0");
-    const da = String(now.getDate()).padStart(2, "0");
-    setSelectedDateStr(`${yr}-${mo}-${da}`);
+    setCurrentDate(now);
+    setSelectedDateStr(getDhakaTodayDateString());
   };
 
-  // Build grid of days for current month view
+  const monthName = currentDate.toLocaleString("en-US", { month: "long" });
+
+  // Generate calendar days for the current view
   const calendarCells = useMemo(() => {
-    const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay(); // 0=Sun, 6=Sat
-    const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+    const startingDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const daysInPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
 
     const cells: Array<{
       dateStr: string;
       dayNumber: number;
       isCurrentMonth: boolean;
-      isToday: boolean;
+      hasData: boolean;
+      totalSent: number;
+      newOutreach: number;
+      followUps: number;
     }> = [];
 
-    const now = new Date();
-    const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-    // Previous month padding cells
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
-      const prevDay = daysInPrevMonth - i;
-      const prevDate = new Date(currentYear, currentMonth - 1, prevDay);
-      const prevDateStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}-${String(prevDay).padStart(2, "0")}`;
-      cells.push({
-        dateStr: prevDateStr,
-        dayNumber: prevDay,
-        isCurrentMonth: false,
-        isToday: prevDateStr === todayDateStr,
-      });
-    }
-
-    // Current month cells
-    for (let day = 1; day <= daysInCurrentMonth; day++) {
-      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    // Previous month filler days
+    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+      const d = daysInPrevMonth - i;
+      const prevM = currentMonth === 0 ? 12 : currentMonth;
+      const prevY = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const dateStr = `${prevY}-${String(prevM).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const stat = dateMap[dateStr];
       cells.push({
         dateStr,
-        dayNumber: day,
-        isCurrentMonth: true,
-        isToday: dateStr === todayDateStr,
+        dayNumber: d,
+        isCurrentMonth: false,
+        hasData: Boolean(stat && stat.totalSent > 0),
+        totalSent: stat?.totalSent || 0,
+        newOutreach: stat?.totalNewOutreach || 0,
+        followUps: stat?.totalFollowUps || 0,
       });
     }
 
-    // Next month padding cells to complete 35 or 42 grid cells
+    // Current month days
+    for (let d = 1; d <= daysInMonth; d++) {
+      const curM = currentMonth + 1;
+      const dateStr = `${currentYear}-${String(curM).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const stat = dateMap[dateStr];
+      cells.push({
+        dateStr,
+        dayNumber: d,
+        isCurrentMonth: true,
+        hasData: Boolean(stat && stat.totalSent > 0),
+        totalSent: stat?.totalSent || 0,
+        newOutreach: stat?.totalNewOutreach || 0,
+        followUps: stat?.totalFollowUps || 0,
+      });
+    }
+
+    // Next month filler days to complete grid (up to 35 or 42)
     const remaining = (7 - (cells.length % 7)) % 7;
     for (let i = 1; i <= remaining; i++) {
-      const nextDate = new Date(currentYear, currentMonth + 1, i);
-      const nextDateStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      const nextM = currentMonth === 11 ? 1 : currentMonth + 2;
+      const nextY = currentMonth === 11 ? currentYear + 1 : currentYear;
+      const dateStr = `${nextY}-${String(nextM).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      const stat = dateMap[dateStr];
       cells.push({
-        dateStr: nextDateStr,
+        dateStr,
         dayNumber: i,
         isCurrentMonth: false,
-        isToday: nextDateStr === todayDateStr,
+        hasData: Boolean(stat && stat.totalSent > 0),
+        totalSent: stat?.totalSent || 0,
+        newOutreach: stat?.totalNewOutreach || 0,
+        followUps: stat?.totalFollowUps || 0,
       });
     }
 
     return cells;
-  }, [currentYear, currentMonth]);
+  }, [currentYear, currentMonth, dateMap]);
 
   // Selected Day Data
   const selectedDayData: DayStat = useMemo(() => {
@@ -192,19 +238,18 @@ export default function CalendarPage() {
     if (selectedDateStr) {
       const [y, m, d] = selectedDateStr.split("-").map(Number);
       if (y && m && d) {
-        const dt = new Date(y, m - 1, d);
-        displayDate = dt.toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        });
-        weekday = dt.toLocaleDateString("en-US", { weekday: "long" });
+        const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+        displayDate = formatDate(dt);
+        weekday = new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Dhaka",
+          weekday: "long",
+        }).format(dt);
       }
     }
 
-    const emailSenders: Record<string, number> = {};
+    const emailSenders: Record<string, SenderEmailBreakdown> = {};
     for (const g of senderGmails) {
-      emailSenders[g] = 0;
+      emailSenders[g] = { newEmails: 0, followUpEmails: 0, total: 0 };
     }
 
     return {
@@ -214,13 +259,16 @@ export default function CalendarPage() {
       isToday: false,
       isYesterday: false,
       emailsBySender: emailSenders,
+      totalNewEmails: 0,
+      totalFollowUpEmails: 0,
       totalEmails: 0,
-      whatsappCount: 0,
-      facebookCount: 0,
-      linkedinCount: 0,
-      instagramCount: 0,
-      twitterCount: 0,
-      followUpsCount: 0,
+      whatsapp: { newCount: 0, followUpCount: 0, total: 0 },
+      facebook: { newCount: 0, followUpCount: 0, total: 0 },
+      linkedin: { newCount: 0, followUpCount: 0, total: 0 },
+      instagram: { newCount: 0, followUpCount: 0, total: 0 },
+      twitter: { newCount: 0, followUpCount: 0, total: 0 },
+      totalNewOutreach: 0,
+      totalFollowUps: 0,
       totalSent: 0,
       activities: [],
     };
@@ -231,43 +279,38 @@ export default function CalendarPage() {
     if (!selectedDateStr) return "Select a date";
     const [y, m, d] = selectedDateStr.split("-").map(Number);
     if (!y || !m || !d) return selectedDateStr;
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString("en-US", {
+    const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Dhaka",
       weekday: "long",
       month: "long",
       day: "numeric",
       year: "numeric",
-    });
+    }).format(dt);
   }, [selectedDateStr]);
 
   // Emails list by sender for selected date
   const selectedEmailsBySender = useMemo(() => {
     const raw = selectedDayData.emailsBySender || {};
     const entries = Object.entries(raw);
+    const senderMap = new Map<string, SenderEmailBreakdown>();
 
-    // If sender accounts configured in Settings, ensure all configured accounts are displayed
-    if (senderGmails.length > 0) {
-      const result: Array<[string, number]> = [];
-      const seen = new Set<string>();
-
-      for (const g of senderGmails) {
-        const count = raw[g.toLowerCase().trim()] ?? 0;
-        result.push([g, count]);
-        seen.add(g.toLowerCase().trim());
-      }
-
-      for (const [sender, count] of entries) {
-        if (!seen.has(sender.toLowerCase().trim())) {
-          result.push([sender, count]);
-        }
-      }
-
-      return result;
+    for (const [sender, val] of entries) {
+      senderMap.set(sender.toLowerCase().trim(), val);
     }
 
-    return entries.length > 0
-      ? entries
-      : ([["No sender accounts configured in Settings", 0]] as Array<[string, number]>);
+    if (senderGmails.length > 0) {
+      for (const g of senderGmails) {
+        const norm = g.toLowerCase().trim();
+        if (!senderMap.has(norm)) {
+          senderMap.set(norm, { newEmails: 0, followUpEmails: 0, total: 0 });
+        }
+      }
+    } else if (senderMap.size === 0) {
+      senderMap.set("Default Sender", { newEmails: 0, followUpEmails: 0, total: 0 });
+    }
+
+    return Array.from(senderMap.entries());
   }, [selectedDayData, senderGmails]);
 
   return (
@@ -279,8 +322,8 @@ export default function CalendarPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
               Activity Calendar
             </h1>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-              Historical Timeline
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+              Bangladesh Time (UTC+6)
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
@@ -352,152 +395,126 @@ export default function CalendarPage() {
             <div>Sat</div>
           </div>
 
-          {/* Day Cells Grid */}
+          {/* Days Cells Grid */}
           <div className="grid grid-cols-7 gap-1.5">
             {calendarCells.map((cell) => {
-              const dayStat = dateMap[cell.dateStr];
-              const hasActivity = dayStat && dayStat.totalSent > 0;
               const isSelected = cell.dateStr === selectedDateStr;
+              const isToday = cell.dateStr === getDhakaTodayDateString();
 
               return (
                 <button
                   key={cell.dateStr}
                   type="button"
-                  onClick={() => {
-                    setSelectedDateStr(cell.dateStr);
-                    // If clicked date belongs to prev/next month, jump calendar to it
-                    const [y, m] = cell.dateStr.split("-").map(Number);
-                    if (y !== currentYear || m - 1 !== currentMonth) {
-                      setCurrentDate(new Date(y, m - 1, 1));
-                    }
-                  }}
-                  className={`min-h-[72px] sm:min-h-[80px] p-2 rounded-xl text-left border flex flex-col justify-between transition-all relative ${
+                  onClick={() => setSelectedDateStr(cell.dateStr)}
+                  className={`relative min-h-[64px] p-1.5 rounded-xl border text-left flex flex-col justify-between transition-all group ${
                     isSelected
-                      ? "bg-indigo-50/60 border-indigo-600 ring-2 ring-indigo-600/20 shadow-xs"
-                      : cell.isToday
-                      ? "bg-slate-50/80 border-indigo-300 font-semibold"
+                      ? "ring-2 ring-indigo-600 border-indigo-600 bg-indigo-50/50 shadow-xs z-10"
+                      : isToday
+                      ? "border-indigo-300 bg-indigo-50/20 font-bold"
                       : cell.isCurrentMonth
-                      ? "bg-white border-slate-200/70 hover:border-slate-300 hover:bg-slate-50/50"
-                      : "bg-slate-50/30 border-slate-100 text-slate-300 opacity-60"
+                      ? cell.hasData
+                        ? "border-slate-200 bg-slate-50/40 hover:border-slate-300 hover:bg-slate-100/50"
+                        : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50"
+                      : "border-transparent text-slate-300 opacity-40 hover:opacity-80"
                   }`}
                 >
+                  {/* Day Number and Today indicator */}
                   <div className="flex items-center justify-between w-full">
                     <span
-                      className={`text-xs font-bold leading-none ${
+                      className={`text-xs ${
                         isSelected
-                          ? "text-indigo-700"
-                          : cell.isToday
-                          ? "text-indigo-600 font-extrabold"
+                          ? "font-extrabold text-indigo-700"
+                          : isToday
+                          ? "font-extrabold text-indigo-600"
                           : cell.isCurrentMonth
-                          ? "text-slate-800"
+                          ? "font-semibold text-slate-700"
                           : "text-slate-400"
                       }`}
                     >
                       {cell.dayNumber}
                     </span>
 
-                    {cell.isToday && (
+                    {isToday && (
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
                     )}
                   </div>
 
-                  {/* Activity Badge if sent actions exist on this date */}
-                  {hasActivity ? (
-                    <div className="mt-1 space-y-1 w-full">
-                      <div className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100/80 text-indigo-800 truncate max-w-full">
-                        {dayStat.totalSent} sent
-                      </div>
-                      {/* Channel indicator dots */}
-                      <div className="flex items-center gap-1">
-                        {dayStat.totalEmails > 0 && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full bg-blue-500"
-                            title={`${dayStat.totalEmails} email(s)`}
-                          />
-                        )}
-                        {dayStat.whatsappCount > 0 && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full bg-emerald-500"
-                            title={`${dayStat.whatsappCount} whatsapp`}
-                          />
-                        )}
-                        {dayStat.followUpsCount > 0 && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full bg-amber-500"
-                            title={`${dayStat.followUpsCount} follow-up(s)`}
-                          />
-                        )}
-                        {(dayStat.linkedinCount > 0 ||
-                          dayStat.facebookCount > 0 ||
-                          dayStat.instagramCount > 0 ||
-                          dayStat.twitterCount > 0) && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full bg-purple-500"
-                            title="Social outreach"
-                          />
-                        )}
-                      </div>
+                  {/* Activity Indicators on Calendar Cell */}
+                  {cell.hasData && (
+                    <div className="space-y-0.5 mt-1">
+                      {cell.newOutreach > 0 && (
+                        <div className="text-[9px] font-bold px-1 py-0.2 rounded bg-blue-100 text-blue-800 truncate">
+                          {cell.newOutreach} New
+                        </div>
+                      )}
+                      {cell.followUps > 0 && (
+                        <div className="text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 text-amber-900 truncate">
+                          {cell.followUps} FU
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <span className="text-[10px] text-slate-300 select-none">
-                      —
-                    </span>
                   )}
                 </button>
               );
             })}
           </div>
 
-          {/* Quick Active Historical Dates Selector */}
-          {allActiveDays.length > 0 && (
-            <div className="pt-3 border-t border-slate-100 space-y-2">
-              <span className="text-xs font-bold text-slate-600 block">
-                Historical Active Dates ({allActiveDays.length} available):
-              </span>
-              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                {allActiveDays.slice(0, 15).map((d) => (
-                  <button
-                    key={d.date}
-                    type="button"
-                    onClick={() => {
-                      setSelectedDateStr(d.date);
-                      const [y, m] = d.date.split("-").map(Number);
-                      setCurrentDate(new Date(y, m - 1, 1));
-                    }}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-all ${
-                      d.date === selectedDateStr
-                        ? "bg-indigo-600 text-white border-indigo-600"
-                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    {d.displayDate} ({d.totalSent})
-                  </button>
-                ))}
+          {/* Legend and Active Dates count */}
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded bg-blue-500" />
+                <span>New Outreach</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded bg-amber-500" />
+                <span>Follow-ups</span>
               </div>
             </div>
-          )}
+
+            <div className="text-[11px] text-slate-400">
+              {allActiveDays.length} active dates recorded
+            </div>
+          </div>
         </div>
 
-        {/* Selected Date Activity Card (lg:col-span-5) */}
+        {/* Selected Date Details Panel (lg:col-span-5) */}
         <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs space-y-5">
-          {/* Header */}
-          <div className="space-y-1 pb-3 border-b border-slate-100">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                Selected Day Breakdown
-              </span>
-              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
-                {selectedDayData.totalSent}{" "}
-                {selectedDayData.totalSent === 1 ? "Sent Action" : "Sent Actions"}
-              </span>
+          {/* Header for Selected Date */}
+          <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Selected Date
+                </span>
+                {selectedDayData.isToday && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white">
+                    Today
+                  </span>
+                )}
+                {selectedDayData.isYesterday && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-white">
+                    Yesterday
+                  </span>
+                )}
+              </div>
+              <h3 className="font-bold text-base text-slate-900 mt-0.5">
+                {formattedSelectedFullDate}
+              </h3>
             </div>
 
-            <h3 className="text-base font-bold text-slate-900 pt-1">
-              {formattedSelectedFullDate}
-            </h3>
+            {/* Separated Totals Badge */}
+            <div className="flex flex-col items-end gap-1">
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                {selectedDayData.totalNewOutreach} New Outreach
+              </span>
+              <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                {selectedDayData.totalFollowUps} Follow-ups
+              </span>
+            </div>
           </div>
 
-          {/* Email Count by Sender Gmail Account (Prompt Requirement) */}
+          {/* Email Count by Sender Gmail Account: Strictly Separated */}
           <div className="space-y-2.5 p-3.5 rounded-xl bg-blue-50/40 border border-blue-100">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900">
@@ -505,98 +522,119 @@ export default function CalendarPage() {
                 <span>Email: By Sender Gmail</span>
               </div>
               <span className="text-xs font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md">
-                Total: {selectedDayData.totalEmails}
+                {selectedDayData.totalNewEmails} new • {selectedDayData.totalFollowUpEmails} fu
               </span>
             </div>
 
-            <div className="space-y-1 bg-white p-2.5 rounded-lg border border-blue-100/80">
-              {selectedEmailsBySender.map(([sender, count]) => (
+            <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-blue-100/80">
+              {selectedEmailsBySender.map(([sender, breakdown]) => (
                 <div
                   key={sender}
-                  className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0 font-mono text-slate-800"
+                  className="py-1.5 border-b border-slate-100 last:border-0 text-xs"
                 >
-                  <span className="truncate max-w-[200px]" title={sender}>
+                  <div className="font-mono text-xs font-semibold text-slate-800 truncate" title={sender}>
                     {sender}
-                  </span>
-                  <span className="font-bold text-slate-900 shrink-0">
-                    — {count}
-                  </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-[11px]">
+                    <span className="text-blue-700 font-semibold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                      <strong>{breakdown.newEmails}</strong> New Emails
+                    </span>
+                    <span className="text-amber-800 font-semibold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      <strong>{breakdown.followUpEmails}</strong> Follow-up Emails
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Platforms Totals */}
+          {/* Platforms Totals: Strictly Separated */}
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Existing Platforms Sent Totals
+              Social Platforms Sent Counts
             </h4>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="space-y-1.5 text-xs">
               {/* WhatsApp */}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-1.5 text-slate-700">
                   <MessageSquare className="w-3.5 h-3.5 text-[#25D366]" />
-                  <span>WhatsApp</span>
+                  <span className="font-semibold">WhatsApp</span>
                 </div>
-                <span className="font-bold text-slate-900">
-                  {selectedDayData.whatsappCount}
-                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    {selectedDayData.whatsapp?.newCount ?? 0} New
+                  </span>
+                  <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {selectedDayData.whatsapp?.followUpCount ?? 0} Follow-ups
+                  </span>
+                </div>
               </div>
 
               {/* Facebook */}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-1.5 text-slate-700">
                   <FacebookIcon className="w-3.5 h-3.5 text-[#1877F2]" />
-                  <span>Facebook</span>
+                  <span className="font-semibold">Facebook</span>
                 </div>
-                <span className="font-bold text-slate-900">
-                  {selectedDayData.facebookCount}
-                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    {selectedDayData.facebook?.newCount ?? 0} New
+                  </span>
+                  <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {selectedDayData.facebook?.followUpCount ?? 0} Follow-ups
+                  </span>
+                </div>
               </div>
 
               {/* LinkedIn */}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-1.5 text-slate-700">
                   <LinkedinIcon className="w-3.5 h-3.5 text-[#0A66C2]" />
-                  <span>LinkedIn</span>
+                  <span className="font-semibold">LinkedIn</span>
                 </div>
-                <span className="font-bold text-slate-900">
-                  {selectedDayData.linkedinCount}
-                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    {selectedDayData.linkedin?.newCount ?? 0} New
+                  </span>
+                  <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {selectedDayData.linkedin?.followUpCount ?? 0} Follow-ups
+                  </span>
+                </div>
               </div>
 
               {/* Instagram */}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-1.5 text-slate-700">
                   <InstagramIcon className="w-3.5 h-3.5 text-[#E1306C]" />
-                  <span>Instagram</span>
+                  <span className="font-semibold">Instagram</span>
                 </div>
-                <span className="font-bold text-slate-900">
-                  {selectedDayData.instagramCount}
-                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    {selectedDayData.instagram?.newCount ?? 0} New
+                  </span>
+                  <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {selectedDayData.instagram?.followUpCount ?? 0} Follow-ups
+                  </span>
+                </div>
               </div>
 
               {/* Twitter / X */}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-1.5 text-slate-700">
                   <TwitterXIcon className="w-3.5 h-3.5 text-slate-800" />
-                  <span>Twitter/X</span>
+                  <span className="font-semibold">Twitter/X</span>
                 </div>
-                <span className="font-bold text-slate-900">
-                  {selectedDayData.twitterCount}
-                </span>
-              </div>
-
-              {/* Follow-ups sent */}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50/80 border border-amber-200/70">
-                <div className="flex items-center gap-1.5 text-amber-900 font-semibold">
-                  <CalendarCheck className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Follow-ups</span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    {selectedDayData.twitter?.newCount ?? 0} New
+                  </span>
+                  <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {selectedDayData.twitter?.followUpCount ?? 0} Follow-ups
+                  </span>
                 </div>
-                <span className="font-bold text-amber-900">
-                  {selectedDayData.followUpsCount}
-                </span>
               </div>
             </div>
           </div>
@@ -615,17 +653,21 @@ export default function CalendarPage() {
                 {selectedDayData.activities.map((act) => (
                   <div
                     key={act.id}
-                    className="p-2 rounded-lg bg-slate-50/80 border border-slate-100 flex items-center justify-between text-xs"
+                    className="p-2.5 rounded-lg bg-slate-50/80 border border-slate-100 flex items-center justify-between text-xs"
                   >
                     <div className="min-w-0 pr-2">
                       <div className="font-semibold text-slate-800 truncate">
                         {act.businessName}
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
-                        <span className="capitalize">{act.channel}</span>
-                        {act.isFollowUp && (
-                          <span className="text-amber-700 bg-amber-100/80 px-1 rounded text-[10px] font-bold">
+                      <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                        <span className="capitalize font-medium">{act.channel}</span>
+                        {act.isFollowUp ? (
+                          <span className="text-amber-800 bg-amber-100/90 px-1.5 py-0.2 rounded text-[10px] font-bold">
                             Follow-up
+                          </span>
+                        ) : (
+                          <span className="text-blue-700 bg-blue-100/90 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                            New
                           </span>
                         )}
                         {act.senderEmail && (
@@ -637,7 +679,7 @@ export default function CalendarPage() {
                     </div>
 
                     {act.time && (
-                      <span className="text-[10px] text-slate-400 shrink-0 font-mono">
+                      <span className="text-[11px] text-slate-500 shrink-0 font-mono">
                         {act.time}
                       </span>
                     )}

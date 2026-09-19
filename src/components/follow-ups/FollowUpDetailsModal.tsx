@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { ChannelIcon } from "@/components/ui/Badge";
 import { formatEnglishDate } from "@/lib/transformers";
+import { CRM_TIMEZONE, formatDate } from "@/lib/date-utils";
 import {
   Calendar,
   Clock,
@@ -44,11 +45,7 @@ function formatRelativeTime(dateInput?: string | Date | null): string {
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return "1 day ago";
   if (diffDays < 30) return `${diffDays} days ago`;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(d);
 }
 
 function formatDateTime(dateInput?: string | Date | null): string {
@@ -56,6 +53,7 @@ function formatDateTime(dateInput?: string | Date | null): string {
   const d = new Date(dateInput);
   if (isNaN(d.getTime())) return "Not sent yet";
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: CRM_TIMEZONE,
     month: "long",
     day: "numeric",
     year: "numeric",

@@ -14,6 +14,7 @@ import { ILead, DbWebsiteStatus, DbLeadStatus } from "./models/Lead";
 import { IFollowUp } from "./models/FollowUp";
 import { IOutreachActivity } from "./models/OutreachActivity";
 import { IMessageTemplate } from "./models/MessageTemplate";
+import { toDhakaDateString, formatTime, formatEnglishDate } from "./date-utils";
 
 export function mapEmailVerification(ev?: any): EmailVerificationResult | undefined {
   if (!ev || !ev.status) return undefined;
@@ -292,30 +293,15 @@ export function transformLeadFinderBusiness(
   };
 }
 
-// Helper to format date in clean English: "September 20, 2026"
-export function formatEnglishDate(dateInput?: Date | string | null): string {
-  if (!dateInput) return "";
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(d);
-}
+export { formatEnglishDate } from "./date-utils";
 
 // Transform OutreachActivity DB document to frontend ActivityItem
 export function transformActivity(doc: IOutreachActivity | any): ActivityItem {
   const dateStr = doc.createdAt
-    ? new Date(doc.createdAt).toISOString().split("T")[0]
-    : new Date().toISOString().split("T")[0];
+    ? toDhakaDateString(doc.createdAt)
+    : toDhakaDateString(new Date());
 
-  const timeStr = doc.createdAt
-    ? new Date(doc.createdAt).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
+  const timeStr = doc.createdAt ? formatTime(doc.createdAt) : "";
 
   let channelMapped: Channel | "system" | "call" | "note" = "system";
   const chLower = (doc.channel || "").toLowerCase();
@@ -382,14 +368,8 @@ export function transformFollowUp(
   lead?: ILead | any
 ): FollowUpItem {
   const schedDate = doc.scheduledAt ? new Date(doc.scheduledAt) : new Date();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const schedDay = new Date(schedDate);
-  schedDay.setHours(0, 0, 0, 0);
-
-  const dueDateStr = schedDate.toISOString().split("T")[0];
-  const todayStr = today.toISOString().split("T")[0];
+  const dueDateStr = toDhakaDateString(schedDate);
+  const todayStr = toDhakaDateString(new Date());
 
   const currentStep = doc.currentStep ?? 1;
 
@@ -398,7 +378,7 @@ export function transformFollowUp(
     calculatedStatus = "completed";
   } else if (dueDateStr === todayStr) {
     calculatedStatus = "today";
-  } else if (schedDay.getTime() < today.getTime()) {
+  } else if (dueDateStr < todayStr) {
     calculatedStatus = "overdue";
   } else {
     calculatedStatus = "upcoming";
@@ -419,7 +399,7 @@ export function transformFollowUp(
         followUpNumber: h.followUpNumber || 1,
         scheduledDate: h.scheduledDate,
         sentAt: h.sentAt ? new Date(h.sentAt).toISOString() : undefined,
-        sentDate: h.sentDate,
+        sentDate: h.sentDate || (h.sentAt ? toDhakaDateString(h.sentAt) : undefined),
         channel: ((h.channel || doc.channel || "email").toLowerCase() as Channel) || "email",
         templateCategory: h.templateCategory,
         templateName: h.templateName,
@@ -448,18 +428,18 @@ export function transformFollowUp(
     priority: priorityLower,
     notes: doc.notes || doc.message || undefined,
     completedAt: doc.completedAt
-      ? new Date(doc.completedAt).toISOString().split("T")[0]
+      ? toDhakaDateString(doc.completedAt)
       : undefined,
     intervalDays: doc.intervalDays ?? 3,
     currentStep: currentStep,
     originalMessageDate: doc.originalMessageDate
-      ? new Date(doc.originalMessageDate).toISOString().split("T")[0]
+      ? toDhakaDateString(doc.originalMessageDate)
       : undefined,
     templateCategory: doc.templateCategory || undefined,
     templateName: doc.templateName || undefined,
     subject: doc.subject || undefined,
     firstFollowUpScheduledAt: doc.firstFollowUpScheduledAt
-      ? new Date(doc.firstFollowUpScheduledAt).toISOString().split("T")[0]
+      ? toDhakaDateString(doc.firstFollowUpScheduledAt)
       : undefined,
     firstFollowUpSentAt: doc.firstFollowUpSentAt
       ? new Date(doc.firstFollowUpSentAt).toISOString()

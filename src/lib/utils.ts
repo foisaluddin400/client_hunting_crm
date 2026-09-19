@@ -6,53 +6,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(dateString: string): string {
-  if (!dateString) return "—";
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString;
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return dateString;
-  }
-}
-
-export function formatDateTime(dateString: string, timeString?: string): string {
-  if (!dateString) return "—";
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString;
-    const dateFormatted = date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-    return timeString ? `${dateFormatted}, ${timeString}` : dateFormatted;
-  } catch {
-    return dateString;
-  }
-}
-
-export function formatRelativeTime(dateString: string): string {
-  if (!dateString) return "—";
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays > 1 && diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays >= 7 && diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-    return formatDate(dateString);
-  } catch {
-    return dateString;
-  }
-}
+export {
+  CRM_TIMEZONE,
+  toDhakaDateString,
+  getDhakaTodayDateString,
+  getDhakaYesterdayDateString,
+  formatDate,
+  formatTime,
+  formatDateTime,
+  formatEnglishDate,
+  formatRelativeTime,
+  getDhakaDayRange,
+} from "./date-utils";
 
 export function replaceTemplateVariables(
   template: string,
