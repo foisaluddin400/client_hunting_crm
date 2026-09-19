@@ -17,11 +17,22 @@ export async function GET(req: NextRequest) {
     const userId = authUser.userId;
     const userObjectId = new Types.ObjectId(userId);
 
+    const followUpSentCondition: any = {
+      $or: [
+        { status: "COMPLETED" },
+        { completedAt: { $exists: true, $ne: null } },
+        { firstFollowUpSentAt: { $exists: true, $ne: null } },
+        { secondFollowUpSentAt: { $exists: true, $ne: null } },
+        { "history.sentAt": { $exists: true, $ne: null } },
+      ],
+    };
+
     // 1. KPI Counts - Unique clients per channel, total leads finder & total follow-ups sent
     const [
       totalLeads,
       totalLeadsFinder,
-      completedFollowUpsCount,
+      completedFollowUpLeadIds,
+      outreachFollowUpLeadIds,
       emailOutreachLeadIds,
       emailFollowUpLeadIds,
       whatsappOutreachLeadIds,
@@ -42,25 +53,52 @@ export async function GET(req: NextRequest) {
     ] = await Promise.all([
       Lead.countDocuments({ userId }),
       LeadFinderBusiness.countDocuments({ userId }),
-      FollowUp.countDocuments({ userId, status: "COMPLETED" }),
-      OutreachActivity.distinct("leadId", { userId, channel: "EMAIL" }),
-      FollowUp.distinct("leadId", { userId, channel: "email" }),
-      OutreachActivity.distinct("leadId", { userId, channel: "WHATSAPP" }),
-      FollowUp.distinct("leadId", { userId, channel: "whatsapp" }),
-      OutreachActivity.distinct("leadId", { userId, channel: "LINKEDIN" }),
-      FollowUp.distinct("leadId", { userId, channel: "linkedin" }),
+      FollowUp.distinct("leadId", { userId, ...followUpSentCondition } as any),
+      OutreachActivity.distinct("leadId", {
+        userId,
+        followUpNumber: { $in: [1, 2] },
+        status: { $nin: ["DRAFT", "FAILED"] },
+      }),
+      OutreachActivity.distinct("leadId", {
+        userId,
+        channel: "EMAIL",
+        status: { $nin: ["DRAFT", "FAILED"] },
+      }),
+      FollowUp.distinct("leadId", { userId, channel: "email", ...followUpSentCondition } as any),
+      OutreachActivity.distinct("leadId", {
+        userId,
+        channel: "WHATSAPP",
+        status: { $nin: ["DRAFT", "FAILED"] },
+      }),
+      FollowUp.distinct("leadId", { userId, channel: "whatsapp", ...followUpSentCondition } as any),
+      OutreachActivity.distinct("leadId", {
+        userId,
+        channel: "LINKEDIN",
+        status: { $nin: ["DRAFT", "FAILED"] },
+      }),
+      FollowUp.distinct("leadId", { userId, channel: "linkedin", ...followUpSentCondition } as any),
       OutreachActivity.distinct("leadId", {
         userId,
         channel: "TWITTER",
+        status: { $nin: ["DRAFT", "FAILED"] },
       }),
       FollowUp.distinct("leadId", {
         userId,
         channel: "twitter",
+        ...followUpSentCondition,
+      } as any),
+      OutreachActivity.distinct("leadId", {
+        userId,
+        channel: "INSTAGRAM",
+        status: { $nin: ["DRAFT", "FAILED"] },
       }),
-      OutreachActivity.distinct("leadId", { userId, channel: "INSTAGRAM" }),
-      FollowUp.distinct("leadId", { userId, channel: "instagram" }),
-      OutreachActivity.distinct("leadId", { userId, channel: "FACEBOOK" }),
-      FollowUp.distinct("leadId", { userId, channel: "facebook" }),
+      FollowUp.distinct("leadId", { userId, channel: "instagram", ...followUpSentCondition } as any),
+      OutreachActivity.distinct("leadId", {
+        userId,
+        channel: "FACEBOOK",
+        status: { $nin: ["DRAFT", "FAILED"] },
+      }),
+      FollowUp.distinct("leadId", { userId, channel: "facebook", ...followUpSentCondition } as any),
       OutreachActivity.countDocuments({ userId, channel: "EMAIL", status: "SENT" }),
       OutreachActivity.countDocuments({ userId, channel: "WHATSAPP" }),
       Lead.countDocuments({ userId, leadStatus: "REPLIED" }),
@@ -105,8 +143,11 @@ export async function GET(req: NextRequest) {
       ...facebookFollowUpLeadIds.map((id) => id.toString()),
     ]).size;
 
-    // Requirement 16: Count actual follow-up actions/records completed from the Follow-up system
-    const totalFollowUpsSent = completedFollowUpsCount;
+    // Requirement 3: Count unique people/leads who actually received at least one follow-up
+    const totalFollowUpsSent = new Set([
+      ...completedFollowUpLeadIds.map((id) => id.toString()),
+      ...outreachFollowUpLeadIds.map((id) => id.toString()),
+    ]).size;
 
     // 2. Pipeline breakdown aggregation
     const pipelineAggregation = await Lead.aggregate([

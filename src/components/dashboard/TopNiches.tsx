@@ -221,8 +221,8 @@ export function TopNiches() {
     if (matchedCategory) {
       counts[matchedCategory] = (counts[matchedCategory] || 0) + 1;
     } else {
-      // Unmatched custom niche counts under Others
-      counts["Others"] = (counts["Others"] || 0) + 1;
+      // Valid custom/scraped niche: preserve its actual name so it never becomes Others
+      counts[leadNiche] = (counts[leadNiche] || 0) + 1;
     }
   });
 

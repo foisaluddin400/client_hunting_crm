@@ -45,11 +45,18 @@ export async function PATCH(
             userId,
           });
 
+          const leadIndustry =
+            finderDoc.businessCategory?.trim() ||
+            (finderDoc.location && finderDoc.location.includes(",")
+              ? finderDoc.location.split(",")[0]?.trim()
+              : null) ||
+            "Other";
+
           if (!linkedLead) {
             linkedLead = await Lead.create({
               userId,
               businessName: finderDoc.businessName,
-              industry: finderDoc.businessCategory || "Other",
+              industry: leadIndustry,
               location: finderDoc.location || finderDoc.fullAddress || "Not specified",
               website: finderDoc.website || undefined,
               websiteStatus: finderDoc.website ? "OTHER" : "NO_WEBSITE",
@@ -70,7 +77,7 @@ export async function PATCH(
             });
           } else {
             linkedLead.businessName = finderDoc.businessName;
-            if (finderDoc.businessCategory) linkedLead.industry = finderDoc.businessCategory;
+            if (leadIndustry && leadIndustry !== "Other") linkedLead.industry = leadIndustry;
             if (finderDoc.location || finderDoc.fullAddress) linkedLead.location = (finderDoc.location || finderDoc.fullAddress) as string;
             if (finderDoc.email) linkedLead.email = finderDoc.email;
             if (leadWhatsapp) linkedLead.whatsapp = leadWhatsapp;

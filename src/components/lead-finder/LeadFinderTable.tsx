@@ -138,23 +138,12 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
   return normB.includes(normF) || normF.includes(normB);
 }
 
-  // Dynamically compute category options combining CRM categories and detected business categories
+  // Dynamically compute category options from Manage Category data
   const availableCategories = useMemo(() => {
-    const map = new Map<string, string>();
-    categories.forEach((c) => {
-      if (c && c.trim()) {
-        const key = c.trim().toLowerCase();
-        if (!map.has(key)) map.set(key, c.trim());
-      }
-    });
-    businesses.forEach((b) => {
-      if (b.businessCategory && b.businessCategory.trim()) {
-        const key = b.businessCategory.trim().toLowerCase();
-        if (!map.has(key)) map.set(key, b.businessCategory.trim());
-      }
-    });
-    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
-  }, [categories, businesses]);
+    return categories.filter(
+      (c) => c && c.trim() && c.toLowerCase() !== "others" && c.toLowerCase() !== "other"
+    );
+  }, [categories]);
 
   // Extract detected locations with counts for dynamic dropdown (Requirement 13)
   const availableLocationCounts = useMemo(() => {
@@ -391,7 +380,7 @@ function matchesCategoryFilter(businessCat: string | null | undefined, filterCat
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
             >
-              <option value="all">All Categories</option>
+              <option value="all">All</option>
               {availableCategories.map((c) => (
                 <option key={c} value={c}>
                   {c}

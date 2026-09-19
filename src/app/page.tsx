@@ -7,6 +7,7 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { LeadPipeline } from "@/components/dashboard/LeadPipeline";
 import { TopNiches } from "@/components/dashboard/TopNiches";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
+import { Last3DaysOutreach } from "@/components/dashboard/Last3DaysOutreach";
 import { Button } from "@/components/ui/Button";
 import {
   TwitterXIcon,
@@ -56,25 +57,32 @@ export default function DashboardPage() {
       }
     }
 
+    const completedFollowUpLeadIds = new Set<string>();
     for (const fu of followUps) {
       if (fu.leadId) {
-        allOutreachedLeadIds.add(fu.leadId);
-        const ch = (fu.channel as string).toLowerCase();
+        const isCompleted =
+          fu.status === "completed" ||
+          Boolean(fu.completedAt) ||
+          (fu.currentStep !== undefined && fu.currentStep > 1);
+        if (isCompleted) {
+          completedFollowUpLeadIds.add(fu.leadId);
+          const ch = (fu.channel as string).toLowerCase();
 
-        if (ch === "email") emailLeadIds.add(fu.leadId);
-        else if (ch === "whatsapp") whatsappLeadIds.add(fu.leadId);
-        else if (ch === "linkedin") linkedinLeadIds.add(fu.leadId);
-        else if (ch === "twitter" || ch === "x") twitterLeadIds.add(fu.leadId);
-        else if (ch === "instagram") instagramLeadIds.add(fu.leadId);
-        else if (ch === "facebook") facebookLeadIds.add(fu.leadId);
+          if (ch === "email") emailLeadIds.add(fu.leadId);
+          else if (ch === "whatsapp") whatsappLeadIds.add(fu.leadId);
+          else if (ch === "linkedin") linkedinLeadIds.add(fu.leadId);
+          else if (ch === "twitter" || ch === "x") twitterLeadIds.add(fu.leadId);
+          else if (ch === "instagram") instagramLeadIds.add(fu.leadId);
+          else if (ch === "facebook") facebookLeadIds.add(fu.leadId);
+        }
       }
     }
 
     return {
       totalFollowUpsSent:
         stats?.totalFollowUpsSent !== undefined
-          ? Math.max(stats.totalFollowUpsSent, allOutreachedLeadIds.size)
-          : allOutreachedLeadIds.size,
+          ? stats.totalFollowUpsSent
+          : completedFollowUpLeadIds.size,
       emailCount:
         stats?.emailCount !== undefined
           ? Math.max(stats.emailCount, emailLeadIds.size)
@@ -186,16 +194,16 @@ export default function DashboardPage() {
 
           <KpiCard
             title="Total Follow-ups Sent"
-            value={(stats?.totalFollowUpsSent ?? 0).toLocaleString()}
+            value={(stats?.totalFollowUpsSent ?? metrics.totalFollowUpsSent ?? 0).toLocaleString()}
             change={
-              (stats?.totalFollowUpsSent ?? 0) > 0
-                ? `${stats?.totalFollowUpsSent} completed`
-                : "0 completed"
+              (stats?.totalFollowUpsSent ?? metrics.totalFollowUpsSent ?? 0) > 0
+                ? `${stats?.totalFollowUpsSent ?? metrics.totalFollowUpsSent} clients`
+                : "0 clients"
             }
             changeType="increase"
             icon={<CalendarCheck className="w-5 h-5 text-amber-600" />}
             iconBgColor="bg-amber-50 text-amber-600"
-            description="Completed follow-up actions"
+            description="Unique leads contacted with follow-up"
           />
 
           <KpiCard
@@ -280,6 +288,11 @@ export default function DashboardPage() {
             description="Unique clients contacted"
           />
         </div>
+      </section>
+
+      {/* Last 3 Days Outreach Activity Section */}
+      <section>
+        <Last3DaysOutreach />
       </section>
 
       {/* Visual Pipeline Section */}

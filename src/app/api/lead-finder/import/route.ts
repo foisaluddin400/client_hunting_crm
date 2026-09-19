@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
-import { LeadFinderBusiness, Lead } from "@/lib/models";
+import { LeadFinderBusiness, Lead, GoogleMapsSearch } from "@/lib/models";
 import { getAuthUser } from "@/lib/auth";
 import { isDuplicateBusiness } from "@/lib/duplicate-detector";
 
@@ -65,10 +65,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Load existing Finder businesses and Leads for this authenticated user to run duplicate checks
-    const [existingFinderBusinesses, existingLeads] = await Promise.all([
+    // Load existing Finder businesses, Leads, and recent search for this user
+    const [existingFinderBusinesses, existingLeads, recentSearch] = await Promise.all([
       LeadFinderBusiness.find({ userId }).select("businessName phone website fullAddress").lean(),
       Lead.find({ userId }).select("businessName phone website location").lean(),
+      GoogleMapsSearch.findOne({ userId }).sort({ createdAt: -1 }).lean(),
     ]);
 
     const results: Array<{
@@ -153,6 +154,15 @@ export async function POST(req: NextRequest) {
         ? new Date(typeof item.scrapedAt === "number" ? item.scrapedAt : item.scrapedAt)
         : new Date();
 
+      let resolvedCategory = (item.businessCategory || item.category || "").trim() || null;
+      if (!resolvedCategory && item.location && item.location.includes(",")) {
+        const firstSegment = item.location.split(",")[0]?.trim();
+        if (firstSegment) resolvedCategory = firstSegment;
+      }
+      if (!resolvedCategory && recentSearch?.category) {
+        resolvedCategory = recentSearch.category.trim();
+      }
+
       toInsert.push({
         userId,
         businessName: bName,
@@ -165,7 +175,7 @@ export async function POST(req: NextRequest) {
             : null,
         openClosed: (item.openClosed || item.openStatus || "").trim() || null,
         openingHours: item.openingHours?.trim() || null,
-        businessCategory: (item.businessCategory || item.category || "").trim() || null,
+        businessCategory: resolvedCategory,
         phone: candidate.phone,
         email: item.email?.trim() || null,
         whatsapp: item.whatsapp?.trim() || null,

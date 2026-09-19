@@ -71,6 +71,12 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle: () => void 
         description: "Stay top-of-mind and never let an outreach conversation go cold",
       };
     }
+    if (pathname.startsWith("/calendar")) {
+      return {
+        title: "Activity Calendar",
+        description: "Historical timeline of daily sent outreach and follow-up activities",
+      };
+    }
     if (pathname.startsWith("/notes")) {
       return {
         title: "Personal Notes",

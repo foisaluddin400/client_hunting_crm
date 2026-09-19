@@ -220,7 +220,7 @@ export default function LeadFinderPage() {
       return;
     }
 
-    const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
+    const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}?businessType=${encodeURIComponent(categoryTrim)}`;
 
     window.open(mapsUrl, "_blank", "noopener,noreferrer");
     saveRecentSearch(categoryTrim, countryTrim, cityTrim);
@@ -240,7 +240,7 @@ export default function LeadFinderPage() {
     setCityLocation(item.city);
 
     const query = `${item.category}, ${item.city}, ${item.country}`;
-    const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
+    const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}?businessType=${encodeURIComponent(item.category)}`;
     window.open(mapsUrl, "_blank", "noopener,noreferrer");
 
     saveRecentSearch(item.category, item.country, item.city);

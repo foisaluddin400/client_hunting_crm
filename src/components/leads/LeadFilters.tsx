@@ -63,6 +63,24 @@ export function LeadFilters({
 
         {/* Quick Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Business Type / Industry Filter Dropdown */}
+          <select
+            value={filters.niche || "all"}
+            onChange={(e) =>
+              onFilterChange({
+                niche: e.target.value === "all" ? "" : e.target.value,
+              })
+            }
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
+          >
+            <option value="all">All</option>
+            {dynamicCategories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+
           {/* Location Filter Dropdown */}
           <select
             value={filters.location || "all"}
@@ -222,17 +240,20 @@ export function LeadFilters({
               Industry / Niche
             </label>
             <select
-              value={filters.niche}
-              onChange={(e) => onFilterChange({ niche: e.target.value })}
+              value={filters.niche || "all"}
+              onChange={(e) =>
+                onFilterChange({
+                  niche: e.target.value === "all" ? "" : e.target.value,
+                })
+              }
               className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
             >
-              <option value="">All Niches</option>
+              <option value="all">All</option>
               {dynamicCategories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
               ))}
-              <option value="Others">Others</option>
             </select>
           </div>
 

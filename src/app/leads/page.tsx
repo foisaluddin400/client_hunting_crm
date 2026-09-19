@@ -81,9 +81,13 @@ function LeadsContent() {
         return false;
       }
 
-      // Niche
-      if (filters.niche && lead.niche !== filters.niche) {
-        return false;
+      // Niche / Business Type
+      if (filters.niche && filters.niche !== "all" && filters.niche !== "") {
+        const selNiche = filters.niche.trim().toLowerCase();
+        const leadNiche = (lead.niche || "").trim().toLowerCase();
+        if (leadNiche !== selNiche) {
+          return false;
+        }
       }
 
       // Location
