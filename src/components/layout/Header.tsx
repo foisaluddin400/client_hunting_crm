@@ -14,22 +14,31 @@ import {
   ChevronRight,
   Mail,
   MessageSquare,
+  Sun,
+  Moon,
+  SunMedium,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useCRM } from "@/lib/context/crm-context";
+import { useTheme } from "@/lib/context/theme-context";
 import { LeadStatusBadge } from "@/components/ui/Badge";
+import { cn } from "@/lib/utils";
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { leads, followUps, userProfile, openAddLead, openLeadDetails } = useCRM();
+  const { theme, setTheme, themes } = useTheme();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isThemeOpen, setIsThemeOpen] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const themeRef = useRef<HTMLDivElement>(null);
 
   // Close popovers when clicking outside
   useEffect(() => {
@@ -39,6 +48,9 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle: () => void 
       }
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setIsNotificationsOpen(false);
+      }
+      if (themeRef.current && !themeRef.current.contains(e.target as Node)) {
+        setIsThemeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -275,6 +287,58 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle: () => void 
                   View all follow-up tasks &rarr;
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Theme Switcher Popover */}
+        <div ref={themeRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setIsThemeOpen(!isThemeOpen)}
+            className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Switch Theme (Light, Dark, Midnight, Soft Light)"
+            aria-label="Toggle theme"
+          >
+            {theme === "light" && <Sun className="w-5 h-5 text-amber-500" />}
+            {theme === "dark" && <Moon className="w-5 h-5 text-indigo-400" />}
+            {theme === "midnight" && <Sparkles className="w-5 h-5 text-indigo-400" />}
+            {theme === "soft-light" && <SunMedium className="w-5 h-5 text-amber-600" />}
+          </button>
+
+          {isThemeOpen && (
+            <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl border border-slate-200/90 shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 p-1.5 space-y-1">
+              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Theme
+              </div>
+              {themes.map((t) => {
+                const isActive = theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setTheme(t.id);
+                      setIsThemeOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-colors",
+                      isActive
+                        ? "bg-indigo-50 text-indigo-700 font-bold"
+                        : "text-slate-700 hover:bg-slate-100"
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {t.id === "light" && <Sun className="w-4 h-4 text-amber-500" />}
+                      {t.id === "dark" && <Moon className="w-4 h-4 text-indigo-400" />}
+                      {t.id === "midnight" && <Sparkles className="w-4 h-4 text-indigo-400" />}
+                      {t.id === "soft-light" && <SunMedium className="w-4 h-4 text-amber-600" />}
+                      <span>{t.label}</span>
+                    </div>
+                    {isActive && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

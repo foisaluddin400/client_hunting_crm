@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCRM } from "@/lib/context/crm-context";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { LeadPipeline } from "@/components/dashboard/LeadPipeline";
+import { LeadOverviewChart } from "@/components/dashboard/LeadOverviewChart";
 import { TopNiches } from "@/components/dashboard/TopNiches";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { Last3DaysOutreach } from "@/components/dashboard/Last3DaysOutreach";
@@ -298,6 +299,11 @@ export default function DashboardPage() {
       {/* Visual Pipeline Section */}
       <section>
         <LeadPipeline />
+      </section>
+
+      {/* 12-Month Lead Overview Chart */}
+      <section>
+        <LeadOverviewChart />
       </section>
 
       {/* 2-Column Grid: Top Niches & Recent Activity */}

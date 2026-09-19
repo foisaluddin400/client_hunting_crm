@@ -22,11 +22,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   if (isAuthPage) {
-    return <div className="min-h-screen bg-[#F8FAFC]">{children}</div>;
+    return <div className="min-h-screen bg-slate-50">{children}</div>;
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex">
       {/* Navigation Sidebar */}
       <Sidebar
         mobileOpen={mobileSidebarOpen}

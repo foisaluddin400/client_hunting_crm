@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/lib/context/toast-context";
+import { ThemeProvider } from "@/lib/context/theme-context";
 import { CRMProvider } from "@/lib/context/crm-context";
 import { AppLayout } from "@/components/layout/AppLayout";
 
@@ -56,15 +57,29 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.className} ${inter.variable} h-full antialiased`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.className} ${inter.variable} h-full antialiased`}>
       <head>
         <link rel="icon" href="/logo_meta.png" type="image/png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var t = localStorage.getItem('crm-theme') || 'light';
+                  document.documentElement.setAttribute('data-theme', t);
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
       </head>
-      <body className={`${inter.className} min-h-full font-sans bg-[#F8FAFC] text-slate-900 antialiased selection:bg-indigo-500 selection:text-white`}>
+      <body className={`${inter.className} min-h-full font-sans bg-slate-50 text-slate-900 antialiased selection:bg-indigo-500 selection:text-white`}>
         <ToastProvider>
-          <CRMProvider>
-            <AppLayout>{children}</AppLayout>
-          </CRMProvider>
+          <ThemeProvider>
+            <CRMProvider>
+              <AppLayout>{children}</AppLayout>
+            </CRMProvider>
+          </ThemeProvider>
         </ToastProvider>
       </body>
     </html>
